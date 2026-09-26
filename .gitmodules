@@ -1,0 +1,15 @@
+[submodule "amplifier/dpf"]
+	path = amplifier/dpf
+	url = https://github.com/DISTRHO/DPF.git
+[submodule "statespace/dpf"]
+	path = statespace/dpf
+	url = https://github.com/DISTRHO/DPF.git
+[submodule "compressor/dpf"]
+	path = compressor/dpf
+	url = https://github.com/DISTRHO/DPF.git
+[submodule "meters/dpf"]
+	path = meters/dpf
+	url = https://github.com/DISTRHO/DPF.git
+[submodule "reverb/dpf"]
+	path = reverb/dpf
+	url = https://github.com/DISTRHO/DPF.git

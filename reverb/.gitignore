@@ -1,0 +1,16 @@
+/build/
+/build-*/
+*.o
+*.a
+*.so
+*.dylib
+compile_commands.json
+.cache/
+
+# Built by tools/reference/build_standalone.sh -- a compiled binary, not
+# source, regenerate it by running that script.
+/tools/reference/generate_reference_samples
+
+# Output of tools/reference/generate_reference_samples -- WAV files, not
+# source, regenerate them by running the tool.
+/tools/reference/output/

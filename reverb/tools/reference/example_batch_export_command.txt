@@ -1,0 +1,87 @@
+Example: overnight batch export of reference reverb samples
+=============================================================
+
+Run this from inside tools/reference/ (or adjust the paths below to
+wherever you're calling it from). --dry-run first prints the grid and
+total file count without rendering anything -- always check that before
+committing to a real run, since the combination count multiplies fast.
+
+Your own dry recordings (Clave.wav, Trumpet.wav) are already sitting in
+./out_dir/user_dry/ from an earlier single run -- --user-dry-dir below
+points straight at that folder so you don't have to move or duplicate
+them.
+
+--- Step 1: check the grid size first --------------------------------
+
+./batch_export.sh --out-dir ./overnight_export \
+  --user-dry-dir ./out_dir/user_dry \
+  --length-min 5   --length-max 15  --length-step 5 \
+  --width-min 4    --width-max 10   --width-step 3 \
+  --height-min 3   --height-max 3   --height-step 0 \
+  --t60-min 0.5    --t60-max 3.0    --t60-step 0.5 \
+  --order-min 15   --order-max 15   --order-step 0 \
+  --dry-run
+
+--- Step 2: the real run, once the count looks reasonable -------------
+
+./batch_export.sh --out-dir ./overnight_export \
+  --user-dry-dir ./out_dir/user_dry \
+  --length-min 5   --length-max 15  --length-step 5 \
+  --width-min 4    --width-max 10   --width-step 3 \
+  --height-min 3   --height-max 3   --height-step 0 \
+  --t60-min 0.5    --t60-max 3.0    --t60-step 0.5 \
+  --order-min 15   --order-max 15   --order-step 0
+
+What each option means
+-----------------------
+--out-dir DIR        Where everything goes: one subfolder per settings
+                      combination, manifest.csv, and index.html.
+
+--user-dry-dir DIR   Folder with your own real dry recordings (shared
+                      across every combination in the sweep -- put files
+                      here once, not per combination).
+
+--<param>-min/-max/-step
+                      For length/width (meters), height (meters),
+                      t60 (seconds), and order (integer, image-source
+                      reflection depth -- higher = slower but denser/
+                      more physically complete). Setting min==max (or
+                      leaving step at 0) holds that one fixed instead of
+                      sweeping it -- that's why height is fixed at 3
+                      and order fixed at 15 in the example above, while
+                      length/width/t60 actually vary.
+
+--dry-run            Print the grid and combination count, render
+                      nothing. Use this first.
+
+After it finishes
+------------------
+Open overnight_export/index.html in a browser: a sortable, filterable
+table with an inline audio player for every dry/reference pair. If your
+browser blocks local audio playback over file://, run this inside
+overnight_export/ instead:
+
+  python3 -m http.server
+
+...then open http://localhost:8000/index.html.
+
+overnight_export/manifest.csv has the same information as plain CSV --
+one row per file, with the exact settings that produced it (length,
+width, height, absorption, target_t60_s, order, sample_rate) -- if you
+want to feed it into something else later instead of browsing by hand.
+
+Tuning the grid size
+----------------------
+Total *_reference.wav files rendered = (length values) x (width values) x
+(height values) x (t60 values) x (order values) x (4 synthesized signals +
+however many files are in --user-dry-dir). The example above is
+3 x 3 x 1 x 6 x 1 x 6 = 324 -- --dry-run will tell you the exact count
+before you commit to it. A higher --order makes EACH file slower to
+render (roughly cubically), not more numerous -- keep it fixed across the
+whole sweep unless you specifically want to compare quality levels too.
+
+The *_dry.wav files are NOT multiplied by the grid -- the dry signal only
+depends on the excitation generator + --sample-rate, never on room/T60/
+order, so it's identical for every grid point and batch_export.sh writes
+each one exactly once into overnight_export/dry/ (shared across the whole
+sweep) rather than duplicating it into all 324 run subdirectories.
