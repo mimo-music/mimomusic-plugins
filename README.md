@@ -4,6 +4,8 @@ Open-source audio plugins (LV2, VST3 and standalone JACK) built with
 [DPF](https://github.com/DISTRHO/DPF), developed and tested in Ardour.
 All projects share the same GUI toolkit, controls and build tooling.
 
+![Parametric EQ](docs/screenshots/parametric_eq.png)
+
 | Folder | Plugins |
 |---|---|
 | [`amplifier/`](amplifier) | Amplifier Mono, Amplifier Stereo |
@@ -13,6 +15,10 @@ All projects share the same GUI toolkit, controls and build tooling.
 | [`reverb/`](reverb) | Reverb Dense, Reverb Plate |
 
 Each folder has its own README with the details of its plugins.
+
+| Dynamic EQ | Multiband Compressor | Compressor |
+|---|---|---|
+| ![Dynamic EQ](docs/screenshots/dynamic_eq.png) | ![Multiband Compressor](docs/screenshots/multiband.png) | ![Compressor](docs/screenshots/compressor.png) |
 
 ## Getting the source
 
@@ -54,6 +60,19 @@ Build output goes to `builds/<project>/`. Set `MIMOMUSIC_BUILDS_ROOT` to
 put it somewhere else. Besides the LV2 bundles, every build also produces
 VST3 bundles and standalone JACK programs in `builds/<project>/build/bin/`;
 copy the `.vst3` folders into `~/.vst3/` to use them.
+
+## Uninstalling
+
+```sh
+./uninstall.sh --dry-run   # list the installed MimoMusic plugins, remove nothing
+./uninstall.sh             # list them, ask, then remove
+./uninstall.sh reverb      # only one project's plugins
+```
+
+It removes only this repository's plugins (LV2 and VST3, and on macOS
+also AU), and only bundles that really are MimoMusic plugins; other
+plugins in the same folders are never touched. Restart Ardour or rescan
+plugins afterwards.
 
 ## Building on macOS
 
