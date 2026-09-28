@@ -328,16 +328,22 @@ bool ParamStripWidget::onScroll(const ScrollEvent& ev)
     const double dir = ev.delta.getY() > 0.0 ? 1.0 : (ev.delta.getY() < 0.0 ? -1.0 : 0.0);
     if (dir == 0.0) return true;
 
+    // Alt+scroll = 10x finer, the same in every plugin of this family: a
+    // tenth of the percentage for a multiplicative step, a tenth of the
+    // increment for an additive one.
+    const bool fine = (ev.mod & kModifierAlt) != 0;
+
     const float current = getter_ ? getter_(f.paramIndex) : f.defaultValue;
     float next;
     if (f.nudgeMultiplicative)
     {
-        constexpr float kFactor = 1.06f; // ~0.5dB-equivalent step on a wide log range
-        next = float(dir > 0 ? double(current) * kFactor : double(current) / kFactor);
+        constexpr double kFactor = 1.06; // ~0.5dB-equivalent step on a wide log range
+        const double factor = fine ? 1.0 + (kFactor - 1.0) / 10.0 : kFactor;
+        next = float(dir > 0 ? double(current) * factor : double(current) / factor);
     }
     else
     {
-        next = current + float(dir) * f.nudgeStep;
+        next = current + float(dir) * (fine ? f.nudgeStep / 10.0f : f.nudgeStep);
     }
     next = std::max(f.minValue, std::min(f.maxValue, next));
     if (setter_) setter_(f.paramIndex, next);

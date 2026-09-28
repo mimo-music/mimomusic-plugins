@@ -190,8 +190,7 @@ private:
     // Recovery is held off until kGrHoldTimeSec has elapsed since that
     // moment, so the displayed peak sits still long enough to actually be
     // read before it starts sliding back toward 0dB (see updateHold()'s
-    // own comment: "so we can see the maximum reduction value a little
-    // longer").
+    // own comment).
     std::chrono::steady_clock::time_point grHoldPeakAt_[2]{};
 
     // Ring buffer of recent gain-reduction readings, pushed once per

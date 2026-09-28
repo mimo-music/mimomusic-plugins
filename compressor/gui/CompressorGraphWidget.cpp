@@ -54,10 +54,8 @@ void CompressorGraphWidget::updateHold(float& holdDb, std::chrono::steady_clock:
 }
 
 // See MultibandGraphWidget::setBandGainDb()'s own comment in the sibling
-// ../statespace project for the full story: a real
-// report ("the numbers are changing so fast, that its difficult to read")
-// against that plugin's own live gain-reduction number applies identically
-// here -- setLiveLevels()/setSecondaryLiveLevels() can be called as often
+// ../statespace project: a live gain-reduction number updated at the
+// full meter rate changes too fast to read, and the same applies here -- setLiveLevels()/setSecondaryLiveLevels() can be called as often
 // as the host delivers DPF output-Parameter updates (up to once per audio
 // block), far faster than a printed digit can actually be read. A one-pole
 // filter against wall-clock time, same technique and time constant, keeps
@@ -291,7 +289,7 @@ void CompressorGraphWidget::drawTransferCurve(float x, float y, float w, float h
 // directions read apart at a glance), and a peak-hold marker (see
 // updateHold()) shows the most extreme recent excursion in whichever
 // direction it actually happened, slowly recovering back toward the 0dB
-// line -- "a hold bar to see the peaks that is recovering".
+// line.
 void CompressorGraphWidget::drawGrMeterColumn(float x, float y, float w, float h, float grDb, float holdDb, float makeupDb, const char* label)
 {
     beginPath();
@@ -512,9 +510,7 @@ void CompressorGraphWidget::onNanoDisplay()
     };
     // Net (gain reduction + Makeup Gain), matching drawGrMeterColumn()'s
     // own foreground bar -- printing the raw, makeup-less number here
-    // while the bar next to it shows the net would read as a mismatch,
-    // undermining the entire point of "so we can see what is happening
-    // with the sound".
+    // while the bar next to it shows the net would read as a mismatch.
     drawGrValue(curveX_ + curveW_ + 6.0f, gainReductionDb_ + makeupGainDb_);
     if (secondaryShown_) drawGrValue(curveX_ + curveW_ + 6.0f + grColW + 4.0f, gainReductionDbB_ + makeupGainDbB_);
 

@@ -20,11 +20,10 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/compressor-mono"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.compressor-mono"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A 1-in/1-out feed-forward dynamics compressor (plus an external " \
-    "sidechain key input): input/output gain, threshold, ratio, attack, " \
-    "release, soft knee, and an optional measured volume-compensation " \
-    "stage that keeps perceived loudness constant while you shape the " \
-    "compression."
+    "A mono feed-forward compressor with an external sidechain input: " \
+    "input gain, threshold, ratio (compressing above or below the " \
+    "threshold), attack, release, soft knee and makeup gain, with an " \
+    "interactive transfer curve and gain-reduction history."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 #define DISTRHO_PLUGIN_BRAND_ID Mimo

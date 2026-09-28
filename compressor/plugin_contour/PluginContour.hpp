@@ -130,8 +130,8 @@ enum ParameterIndex
     // A second full dynamics bank -- Contour's own version of
     // kParamThresholdB/kParamRatioB/.../kParamMakeupGainB has no Ratio/
     // Knee (this plugin has neither), but does need a **second whole
-    // curve** -- "the difference to contour is that we can draw the curve
-    // freely" applies per-bank too, once B is independent, not just to A.
+    // curve** -- the freely drawn curve applies per bank too, once B is
+    // independent, not just to A.
     // See kParamThresholdB's own comment (PluginCompressorStereo.hpp) for
     // the "start linked, split on edit" fallback every field here follows
     // identically -- B mirrors A's own curve_/triggerCondition_ (not just

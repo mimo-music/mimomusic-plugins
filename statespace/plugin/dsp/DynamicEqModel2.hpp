@@ -113,8 +113,8 @@ struct DynamicEqBand2
 {
     // Band shape. Reuses the sibling (non-dynamic) EQ's own EqBandType
     // rather than a second enum, but only Bell/LowShelf/HighShelf/BandShelf
-    // are ever reachable from this plugin's own UI (btnType_'s cycle, see
-    // UIDynEq2.hpp, and the graph's right-click menu) --
+    // are ever reachable from this plugin's own UI (the band list's TYPE
+    // column and the graph's right-click menu) --
     // LowPass/HighPass/Notch/BandPass/AllPass aren't
     // representable by the Regalia-Mitra "fixed allpass + gain blend"
     // construction this whole engine depends on for dynamic gain to be
@@ -198,16 +198,11 @@ struct DynamicEqModel2
 {
     std::vector<DynamicEqBand2> bands;
     double outputTrimDb = 0.0; // applied uniformly to C/D of the *exported* snapshot; the live engine applies it as a plain output multiply
-    // Which band (if any) is currently soloed -- a single "spotlight"
-    // index into `bands`, not a per-band flag: unlike the sibling EQ
-    // plugin's BandListWidget (which shows every band at once and
-    // genuinely benefits from soloing more than one simultaneously), this
-    // UI shows only the *selected* band's own controls at a time, so a
-    // per-band solo flag here just went stale the moment you selected a
-    // different band (the sibling Multiband Compressor plugin, with the
-    // identical UI shape, works the same way). UIDynEq2::selectBand() moves this
-    // index along with the selection whenever solo is engaged. -1 = no
-    // solo active. See dyneq2::activeBandIndices().
+    // Which band (if any) is currently soloed -- one band at a time, a
+    // single index into `bands` rather than a per-band flag (unlike the
+    // Parametric EQ). The band list's SOLO column sets it on the clicked
+    // row and clears it when clicked again. -1 = no solo active. See
+    // dyneq2::activeBandIndices().
     int soloedBand = -1;
     char name[64] = "Untitled Dynamic EQ 2";
 
@@ -254,8 +249,7 @@ void propagateHarmonicFreq(DynamicEqModel2& model, int index, double freqHz, dou
 int createHarmonicTwin(DynamicEqModel2& model, int sourceIndex, double factor, double sampleRate);
 void unlinkHarmonic(DynamicEqModel2& model, int index);
 
-// "linked bands should have linked threhold rations and ranges" (direct
-// ask). Unlike freqHz (propagateHarmonicFreq(), which scales by each
+// Linked bands share threshold, ratios and range. Unlike freqHz (propagateHarmonicFreq(), which scales by each
 // member's own harmonicRatio -- these bands sit at genuinely different
 // frequencies, "linked" only in the sense of moving together),
 // Threshold/Ratio/RatioUp/Range are level-domain settings with no

@@ -22,51 +22,13 @@
 START_NAMESPACE_DISTRHO
 
 using DGL_NAMESPACE::Color;
+using DGL_NAMESPACE::DynEqBandListWidget2;
 using DGL_NAMESPACE::DynEqGraphWidget2;
-using DGL_NAMESPACE::ParamFieldSpec;
-using DGL_NAMESPACE::ParamStripWidget;
 using DGL_NAMESPACE::SimpleButton;
 
 namespace {
 constexpr int kDebounceIdleTicks = 3; // same debounce window as every sibling plugin's own engine push
 
-enum GlobalField : uint32_t { kFieldOutputTrim = 0, kFieldSpectrumSmoothMs = 1 };
-enum BandField : uint32_t {
-    kFieldFreq = 0, kFieldGain = 1, kFieldQ = 2,
-    kFieldThreshold = 3, kFieldRatio = 4, kFieldRange = 5, kFieldAttack = 6, kFieldRelease = 7, kFieldRatioUp = 8,
-    kFieldBandwidth = 9
-};
-
-// The selected band's field list. The third slot is Q, or -- for a Band
-// Shelf, whose first-order slopes have no Q -- its bandwidth in octaves
-// (same place, so the strip layout doesn't jump).
-std::vector<DGL_NAMESPACE::ParamFieldSpec> bandStripFields(bool bandShelf)
-{
-    std::vector<DGL_NAMESPACE::ParamFieldSpec> f = {
-        { "Freq", "Hz", 20.0f, 20000.0f, 1000.0f, 10.0f, true, 0, kFieldFreq,
-          "Freq: the selected band's own center frequency." },
-        { "Gain", "dB", -24.0f, 24.0f, 0.0f, 0.5f, false, 1, kFieldGain,
-          "Gain: the selected band's own resting boost/cut, before any dynamics pull it back." },
-        { "Q", "", 0.05f, 100.0f, 1.0f, 1.08f, true, 2, kFieldQ,
-          "Q: how narrow or wide the selected band's own bell shape is." },
-        { "Threshold", "dB", -72.0f, 0.0f, -24.0f, 0.5f, false, 1, kFieldThreshold,
-          "Threshold: the level (at this band's own frequency) above which its gain starts pulling back." },
-        { "Ratio", ":1", 1.0f, 20.0f, 4.0f, 0.1f, true, 1, kFieldRatio,
-          "Ratio: how strongly this band's own gain is pulled back once past the threshold." },
-        { "Up Ratio", ":1", 1.0f, 20.0f, 1.0f, 0.1f, true, 1, kFieldRatioUp,
-          "Up Ratio: how strongly this band's own gain is boosted further while below the threshold." },
-        { "Range", "dB", 0.0f, 40.0f, 5.0f, 0.5f, false, 1, kFieldRange,
-          "Range: the maximum this band's own dynamic gain change can reach, in either direction." },
-        { "Attack", "ms", 0.1f, 200.0f, 10.0f, 1.0f, true, 2, kFieldAttack,
-          "Attack: how quickly this band's own dynamics engage once its threshold is crossed." },
-        { "Release", "ms", 5.0f, 2000.0f, 100.0f, 5.0f, true, 1, kFieldRelease,
-          "Release: how quickly this band's own dynamics relax back once level drops again." },
-    };
-    if (bandShelf)
-        f[2] = { "BW", "oct", float(ssfilter::kMinBandwidthOct), float(ssfilter::kMaxBandwidthOct), 2.0f, 1.08f, true, 2, kFieldBandwidth,
-                 "BW: the selected Band Shelf's width in octaves -- its gain applies across this range around Freq, 0dB outside." };
-    return f;
-}
 } // namespace
 
 UIDynEq2::UIDynEq2()
@@ -92,76 +54,8 @@ UIDynEq2::UIDynEq2()
     graph_->setOnSelectionChanged([this](int i) { selectBand(i); });
     graph_->setOnSpectrumAutoscaleChanged([this](bool on) { setState("spectrumAutoscale", on ? "1" : "0"); });
 
-    // Output Trim last -- the actual output-facing control in this group,
-    // so it lands on the right side both within the strip and (per
-    // layout()'s own repositioning) at the right end of its row.
-    globalStrip_ = new ParamStripWidget(this);
-    globalStrip_->setFields({
-        { "Spectrum Smooth", "ms", 1.0f, 2000.0f, 150.0f, 10.0f, true, 0, kFieldSpectrumSmoothMs,
-          "Spectrum Smooth: how heavily the background spectrum display is time-averaged." },
-        { "Output Trim", "dB", -24.0f, 24.0f, 0.0f, 0.5f, false, 1, kFieldOutputTrim,
-          "Output Trim: a manual master gain applied after every band." },
-    });
-    globalStrip_->setGetter([this](uint32_t id) -> float {
-        switch (id)
-        {
-        case kFieldOutputTrim: return float(dynEqModel_.outputTrimDb);
-        case kFieldSpectrumSmoothMs: return float(spectrumSmoothMs_);
-        }
-        return 0.0f;
-    });
-    globalStrip_->setSetter([this](uint32_t id, float v) {
-        switch (id)
-        {
-        case kFieldOutputTrim:
-            dynEqModel_.outputTrimDb = std::max(-24.0, std::min(24.0, double(v)));
-            applyModelToEngine();
-            break;
-        case kFieldSpectrumSmoothMs:
-        {
-            spectrumSmoothMs_ = std::max(1.0, double(v));
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "%.6g", spectrumSmoothMs_);
-            setState("spectrumSmoothMs", buf);
-            break;
-        }
-        }
-    });
-
-    bandStrip_ = new ParamStripWidget(this);
-    bandStrip_->setFields(bandStripFields(false));
-    bandStrip_->setGetter([this](uint32_t id) -> float {
-        const ssfilter::DynamicEqBand2 b = getBand(selectedBand_);
-        switch (id)
-        {
-        case kFieldFreq: return float(b.freqHz);
-        case kFieldGain: return float(b.gainDb);
-        case kFieldQ: return float(b.q);
-        case kFieldBandwidth: return float(b.bandwidthOct);
-        case kFieldThreshold: return float(b.thresholdDb);
-        case kFieldRatio: return float(b.ratio);
-        case kFieldRatioUp: return float(b.ratioUp);
-        case kFieldRange: return float(b.rangeDb);
-        case kFieldAttack: return float(b.attackMs);
-        case kFieldRelease: return float(b.releaseMs);
-        }
-        return 0.0f;
-    });
-    bandStrip_->setSetter([this](uint32_t id, float v) {
-        switch (id)
-        {
-        case kFieldFreq: setBandFreq(selectedBand_, v); break;
-        case kFieldGain: setBandGain(selectedBand_, v); break;
-        case kFieldQ: setBandQ(selectedBand_, v); break;
-        case kFieldBandwidth: setBandBandwidth(selectedBand_, v); break;
-        case kFieldThreshold: setBandThreshold(selectedBand_, v); break;
-        case kFieldRatio: setBandRatio(selectedBand_, v); break;
-        case kFieldRatioUp: setBandRatioUp(selectedBand_, v); break;
-        case kFieldRange: setBandRange(selectedBand_, v); break;
-        case kFieldAttack: setBandAttack(selectedBand_, v); break;
-        case kFieldRelease: setBandRelease(selectedBand_, v); break;
-        }
-    });
+    list_ = new DynEqBandListWidget2(this, this);
+    list_->setOnSelectionChanged([this](int i) { selectBand(i); });
 
     btnLoad_ = new SimpleButton(this, "Load...");
     btnLoad_->setCallback([this] {
@@ -220,78 +114,11 @@ UIDynEq2::UIDynEq2()
         addBand(std::sqrt(bestLo * bestHi), 0.0); // also selects the new band and pushes the model
     });
 
-    btnDeleteBand_ = new SimpleButton(this, "Delete Band");
-    btnDeleteBand_->setCallback([this] { if (selectedBand_ >= 0) removeBand(selectedBand_); });
-
-    btnPrevBand_ = new SimpleButton(this, "<");
-    btnPrevBand_->setCallback([this] { selectBand(selectedBand_ - 1); });
-    btnNextBand_ = new SimpleButton(this, ">");
-    btnNextBand_->setCallback([this] { selectBand(selectedBand_ + 1); });
-
-    btnEnabled_ = new SimpleButton(this, "Enabled");
-    btnEnabled_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        setBandEnabled(selectedBand_, !getBand(selectedBand_).enabled);
-        refreshBandStripLabels();
-    });
-    btnSolo_ = new SimpleButton(this, "Solo");
-    btnSolo_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        // A single spotlight, not a per-band flag -- see
-        // DynamicEqModel2::soloedBand's own comment.
-        setBandSolo(selectedBand_, dynEqModel_.soloedBand != selectedBand_);
-        refreshBandStripLabels();
-    });
-    btnDynamics_ = new SimpleButton(this, "Dynamics");
-    btnDynamics_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        setBandDynamicsEnabled(selectedBand_, !getBand(selectedBand_).dynamicsEnabled);
-        refreshBandStripLabels();
-    });
-    // Click-to-cycle Both/Left Only/Right Only, same convention as the
-    // Parametric EQ's own Channel column. No right-click menu or list column
-    // here (this UI has neither, unlike the Parametric EQ's BandListWidget
-    // -- see this file's own top comment on why every per-band control is
-    // a toolbar button re-targeted at selectedBand_ instead), so this
-    // button is the one place it's reachable.
-    // Band shape. Cycles Bell -> Low Shelf -> High Shelf -> Band Shelf ->
-    // Bell; see DynamicEqBand2::type's
-    // own comment for why only these.
-    btnType_ = new SimpleButton(this, "Bell");
-    btnType_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        const ssfilter::EqBandType t = getBand(selectedBand_).type;
-        const ssfilter::EqBandType next = t == ssfilter::EqBandType::Bell ? ssfilter::EqBandType::LowShelf
-                                         : t == ssfilter::EqBandType::LowShelf ? ssfilter::EqBandType::HighShelf
-                                         : t == ssfilter::EqBandType::HighShelf ? ssfilter::EqBandType::BandShelf
-                                         : ssfilter::EqBandType::Bell;
-        setBandType(selectedBand_, next);
-        refreshBandStripLabels();
-    });
-
-    btnChannel_ = new SimpleButton(this, "Ch: Both");
-    btnChannel_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        // Unified 5-state cycle (Both -> Left -> Right -> L->R -> R->L ->
-        // Both) -- the exact same helper, exact same order, the Parametric
-        // EQ's own Channel column uses (ssfilter::advanceChannelCrossFeed(),
-        // EqModel.hpp), so both plugins behave identically.
-        const ssfilter::DynamicEqBand2 eb = getBand(selectedBand_);
-        ssfilter::EqChannel nextCh; ssfilter::EqCrossFeed nextCf;
-        ssfilter::advanceChannelCrossFeed(eb.channel, eb.crossFeed, nextCh, nextCf);
-        if (nextCf != eb.crossFeed) setBandCrossFeed(selectedBand_, nextCf);
-        if (nextCh != eb.channel) setBandChannel(selectedBand_, nextCh);
-        refreshBandStripLabels();
-    });
-
-    // Audition -- same idea as the (now-deleted) De-esser plugin's own
-    // "Listen" (see PluginDynEq2.hpp's kParamAudition comment for why this
-    // was renamed): preview selectedBand_'s isolated detector output,
-    // with its own live gain reduction applied, for tuning by ear.
-    // Grouped with the other per-band toggles rather than the top
-    // toolbar's Bypass since it only ever acts on whichever band is
-    // currently selected -- refreshAuditionColors() grays it out (and
-    // forces Audition back off) the moment there's no band to preview.
+    // Audition: preview selectedBand_'s isolated detector output, with its
+    // own live gain reduction applied, for tuning by ear. Next to +Band,
+    // as in the Parametric EQ, since it acts on the selected band --
+    // refreshAuditionColors() grays it out (and turns Audition off) when
+    // there's no band to preview.
     btnAudition_ = new SimpleButton(this, "Audition");
     btnAudition_->setCallback([this] {
         if (selectedBand_ < 0) return;
@@ -300,21 +127,6 @@ UIDynEq2::UIDynEq2()
         refreshAuditionColors();
     });
     refreshAuditionColors();
-
-    // Harmonic link, as in the Parametric EQ. See
-    // IDynEqEditorHost2::createHarmonicTwin()'s own comment for why a
-    // fixed x2 (octave) factor, not a preset/custom-factor menu.
-    btnLinkTwin_ = new SimpleButton(this, "Twin x2");
-    btnLinkTwin_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        createHarmonicTwin(selectedBand_, 2.0);
-    });
-    btnUnlink_ = new SimpleButton(this, "Unlink");
-    btnUnlink_->setCallback([this] {
-        if (selectedBand_ < 0) return;
-        unlinkHarmonic(selectedBand_);
-        refreshBandStripLabels();
-    });
 
     btnReset_ = new SimpleButton(this, "Reset State");
     btnReset_->setCallback([this] { setParameterValue(kParamResetTrigger, 1.0f); });
@@ -352,17 +164,7 @@ UIDynEq2::UIDynEq2()
     tooltip_->addTarget(btnLoad_, "Load a saved Dynamic EQ 2 preset from disk.");
     tooltip_->addTarget(btnSave_, "Save the current settings as a Dynamic EQ 2 preset.");
     tooltip_->addTarget(btnExport_, "Export the current resting-gain shape as a plain State-Space filter (.ssjson).");
-    tooltip_->addTarget(btnAddBand_, "Add a new band in the widest still-empty gap between existing bands.");
-    tooltip_->addTarget(btnDeleteBand_, "Delete the currently selected band.");
-    tooltip_->addTarget(btnPrevBand_, "Select the previous band.");
-    tooltip_->addTarget(btnNextBand_, "Select the next band.");
-    tooltip_->addTarget(btnEnabled_, "Enable or disable the selected band entirely.");
-    tooltip_->addTarget(btnSolo_, "Solo the selected band -- mutes every other band's own contribution.");
-    tooltip_->addTarget(btnDynamics_, "Toggle whether the selected band's own dynamics (Threshold/Ratio/Range/Attack/Release) are active.");
-    tooltip_->addTarget(btnType_, "Cycle this band's own shape: Bell, Low Shelf, High Shelf. Q is unused for Low/High Shelf (a first-order shelf's own slope is fixed).");
-    tooltip_->addTarget(btnChannel_, "Cycle: Both, Left only, Right only, L->R, R->L. L->R/R->L feed this band's own filtered output into the OTHER channel, on top of what's already there -- see the graph's own L->R/R->L transit-gain controls.");
-    tooltip_->addTarget(btnLinkTwin_, "Create a linked twin of this band an octave (x2) above -- moving either band's frequency moves both, keeping their ratio fixed.");
-    tooltip_->addTarget(btnUnlink_, "Remove this band from its harmonic link group -- it stops following its twin's frequency moves.");
+    tooltip_->addTarget(btnAddBand_, "Add a new band in the widest still-empty gap between existing bands (or click the graph).");
     tooltip_->addTarget(btnAudition_, "Audition the selected band's own isolated detector signal, with its live gain reduction applied.");
     tooltip_->addTarget(btnReset_, "Reset the engine's internal filter state (clears any transient buildup).");
     tooltip_->addTarget(btnBypass_, "Bypass: passes audio through unprocessed.");
@@ -371,10 +173,10 @@ UIDynEq2::UIDynEq2()
     tooltip_->addTarget(btnAbCopy_, "Copy the current settings into the other A/B slot.");
     tooltip_->addTarget(btnUndo_, "Undo the last settings change.");
     tooltip_->addTarget(btnRedo_, "Redo the last undone settings change.");
-    tooltip_->addFieldTarget(globalStrip_, [this](double x, double y) { return globalStrip_->fieldTooltipAt(x, y); });
-    tooltip_->addFieldTarget(bandStrip_, [this](double x, double y) { return bandStrip_->fieldTooltipAt(x, y); });
+    // Column hover descriptions, via the list's own cellTooltipAt().
+    tooltip_->addFieldTarget(list_, [this](double x, double y) { return list_->cellTooltipAt(x, y); });
 
-    refreshBandStripLabels();
+    refreshAuditionColors();
     layout();
 }
 
@@ -388,15 +190,9 @@ UIDynEq2::~UIDynEq2()
 
 void UIDynEq2::layout()
 {
-    // Row 1: every system-wide/whole-instance control (file ops -> Reset/
-    // Bypass -> A/B compare -> Undo/Redo), flush against the window's own
-    // top edge, compare/history right-aligned so that group always reads
-    // in the same corner across every plugin in this family. Everything
-    // below row 1 belongs to *this* filter specifically -- band
-    // add/delete/navigation/toggles, the band's own parameter strip, and
-    // the global spectrum/output-trim fields -- and sits as close to the
-    // graph it affects as the layout allows, not mixed into the
-    // system-wide row above it.
+    // The Parametric EQ's layout (UIEq::layout()): row 1 system-wide
+    // controls with A/B and Undo/Redo right-aligned; row 2 this filter's
+    // own controls; then the graph and, below it, the band list.
     const float w = float(getWidth());
     const float h = float(getHeight());
 
@@ -406,13 +202,7 @@ void UIDynEq2::layout()
 
     constexpr float pad = 6.0f;
     constexpr float rowH = 28.0f;
-    constexpr float stripH = 46.0f;
-    // The global-fields row (Output Trim/Spectrum Smooth) needs the same
-    // height as bandStrip_'s own row, not the shorter button-row height --
-    // ParamStripWidget draws two stacked lines per field (value, then its
-    // label underneath), and at rowH's 28px that pair had nowhere near
-    // enough room and visibly overlapped.
-    const float toolbarH = rowH + pad + rowH + pad + stripH + pad + stripH + pad;
+    constexpr float toolbarH = 2.0f * rowH + pad;
 
     float bx = pad, by = pad;
     const float bh = rowH - 4.0f;
@@ -440,64 +230,45 @@ void UIDynEq2::layout()
     placeRight(btnAbB_, 30.0f);
     placeRight(btnAbA_, 30.0f);
 
-    // Row 2: this filter's own band management, right above its own
-    // parameter strip (row 3) and the graph both act on.
-    by += rowH + pad;
+    // Row 2: +Band, Audition, then the spectrum/output fields.
+    by += rowH + 2.0f;
     bx = pad;
-    place(btnAddBand_, 78);
-    place(btnDeleteBand_, 96);
-    place(btnPrevBand_, 26);
-    bandLabelX_ = bx;
-    bandLabelY_ = by;
-    bandLabelW_ = 116.0f;
-    bx += bandLabelW_;
-    place(btnNextBand_, 26);
-    place(btnEnabled_, 68);
-    place(btnSolo_, 54);
-    place(btnDynamics_, 78);
-    place(btnType_, 74);
-    place(btnChannel_, 68);
+    place(btnAddBand_, 68);
     place(btnAudition_, 68);
-    place(btnLinkTwin_, 64);
-    place(btnUnlink_, 60);
 
-    // Row 3: the selected band's own parameter strip.
-    by += rowH + pad;
-    bx = pad;
-    bandStrip_->setAbsolutePos(int(bx), int(by));
-    bandStrip_->setSize(uint(w - 2.0f * pad), uint(stripH));
-
-    // Row 4: this filter's own global fields (spectrum display + output).
-    by += stripH + pad;
-    bx = pad;
-
-    // Single-line fields (label to the left, value centered, both on one
-    // baseline) -- still only need bh's height, so center that shorter box
-    // within the now-taller row rather than top-aligning it against
-    // globalStrip_'s full height.
-    const float smallFieldY = by + (stripH - bh) * 0.5f;
-    spectrumModeFieldX_ = bx + 108.0f;
-    spectrumModeFieldY_ = smallFieldY;
+    spectrumModeFieldX_ = bx + 108.0f; // room for the "Spectrum Source:" label
+    spectrumModeFieldY_ = by;
     spectrumModeFieldW_ = 44.0f;
     spectrumModeFieldH_ = bh;
     bx = spectrumModeFieldX_ + spectrumModeFieldW_ + 20.0f;
 
-    fftSizeFieldX_ = bx + 140.0f;
-    fftSizeFieldY_ = smallFieldY;
+    smoothFieldX_ = bx + 150.0f; // room for the "Spectrum Smoothing (ms):" label
+    smoothFieldY_ = by;
+    smoothFieldW_ = 56.0f;
+    smoothFieldH_ = bh;
+    bx = smoothFieldX_ + smoothFieldW_ + 20.0f;
+
+    fftSizeFieldX_ = bx + 140.0f; // room for the "Spectrum Resolution:" label
+    fftSizeFieldY_ = by;
     fftSizeFieldW_ = 68.0f;
     fftSizeFieldH_ = bh;
     bx = fftSizeFieldX_ + fftSizeFieldW_ + 20.0f;
 
-    // Output Trim/Spectrum Smooth last -- the output-facing control (Output
-    // Trim, the group's rightmost field per its own setFields() above) now
-    // sits at the right end of the row instead of the left.
-    globalStrip_->setAbsolutePos(int(bx), int(by));
-    globalStrip_->setSize(uint(280.0f), uint(stripH));
+    trimFieldX_ = bx + 116.0f; // room for the "Output Trim (dB):" label
+    trimFieldY_ = by;
+    trimFieldW_ = 64.0f;
+    trimFieldH_ = bh;
 
-    const float contentTop = toolbarH + pad;
+    const float contentTop = toolbarH + pad * 2.0f;
     const float contentH = h - contentTop - pad;
+    const float graphH = contentH * 0.66f;
+    const float listH = contentH - graphH - pad;
+
     graph_->setAbsolutePos(int(pad), int(contentTop));
-    graph_->setSize(uint(w - 2.0f * pad), uint(contentH));
+    graph_->setSize(uint(w - 2.0f * pad), uint(graphH));
+
+    list_->setAbsolutePos(int(pad), int(contentTop + graphH + pad));
+    list_->setSize(uint(w - 2.0f * pad), uint(listH));
 }
 
 void UIDynEq2::onResize(const ResizeEvent& ev)
@@ -506,104 +277,21 @@ void UIDynEq2::onResize(const ResizeEvent& ev)
     layout();
 }
 
-void UIDynEq2::refreshBandStripLabels()
-{
-    const bool haveBand = selectedBand_ >= 0 && selectedBand_ < getBandCount();
-    const ssfilter::DynamicEqBand2 b = getBand(selectedBand_);
-    const bool soloed = haveBand && dynEqModel_.soloedBand == selectedBand_; // a single spotlight, not a per-band flag -- see soloedBand's own comment
-    btnEnabled_->setColors((haveBand && b.enabled) ? Color(58, 62, 70) : Color(150, 90, 40),
-                            (haveBand && b.enabled) ? Color(78, 84, 96) : Color(175, 110, 55),
-                            Color(230, 232, 236));
-    btnSolo_->setColors(soloed ? Color(180, 160, 40) : Color(58, 62, 70),
-                         soloed ? Color(205, 185, 55) : Color(78, 84, 96),
-                         soloed ? Color(20, 20, 22) : Color(230, 232, 236));
-    btnDynamics_->setColors((haveBand && b.dynamicsEnabled) ? Color(60, 110, 150) : Color(58, 62, 70),
-                             (haveBand && b.dynamicsEnabled) ? Color(75, 130, 175) : Color(78, 84, 96),
-                             Color(230, 232, 236));
-
-    // Band shape -- neutral coloring, same "nothing special to flag"
-    // convention as Channel's own "Ch: Both" reading, since all three
-    // shapes are equally ordinary choices (unlike Channel/Crossfeed,
-    // where non-Both/None is the noteworthy state).
-    {
-        const char* label = !haveBand ? "Bell"
-                           : b.type == ssfilter::EqBandType::LowShelf ? "Low Shelf"
-                           : b.type == ssfilter::EqBandType::HighShelf ? "High Shelf"
-                           : b.type == ssfilter::EqBandType::BandShelf ? "Band Shelf" : "Bell";
-        btnType_->setLabel(label);
-        btnType_->setEnabled(haveBand);
-    }
-
-    // Q <-> BW in the strip's third slot, only when that actually changes.
-    const bool wantBandwidth = haveBand && b.type == ssfilter::EqBandType::BandShelf;
-    if (wantBandwidth != stripShowsBandwidth_)
-    {
-        bandStrip_->setFields(bandStripFields(wantBandwidth));
-        stripShowsBandwidth_ = wantBandwidth;
-        bandStrip_->repaint();
-    }
-
-    // Channel -- same blue/red this project now uses everywhere a channel
-    // needs distinguishing (the graph's own per-channel spectrum traces/
-    // curves/node rings), "Ch: Both" reading exactly like the other
-    // buttons' own neutral coloring when there's nothing special to flag.
-    // Crossfeed gets its own purple, same as the Parametric EQ's own
-    // Channel column -- a genuinely different kind of routing from plain
-    // Left/Right, see EqCrossFeed's own comment.
-    {
-        const bool isL2R = haveBand && b.crossFeed == ssfilter::EqCrossFeed::LeftToRight;
-        const bool isR2L = haveBand && b.crossFeed == ssfilter::EqCrossFeed::RightToLeft;
-        const bool isLeft = haveBand && !isL2R && !isR2L && b.channel == ssfilter::EqChannel::Left;
-        const bool isRight = haveBand && !isL2R && !isR2L && b.channel == ssfilter::EqChannel::Right;
-        btnChannel_->setLabel(isL2R ? "Ch: L->R" : isR2L ? "Ch: R->L" : isLeft ? "Ch: Left" : isRight ? "Ch: Right" : "Ch: Both");
-        btnChannel_->setColors((isL2R || isR2L) ? Color(140, 80, 180) : isLeft ? Color(55, 90, 160) : isRight ? Color(150, 60, 50) : Color(58, 62, 70),
-                                (isL2R || isR2L) ? Color(160, 100, 200) : isLeft ? Color(70, 110, 185) : isRight ? Color(175, 75, 65) : Color(78, 84, 96),
-                                Color(230, 232, 236));
-        btnChannel_->setEnabled(haveBand);
-    }
-
-    // Harmonic link -- Unlink only meaningful (and only enabled) once
-    // selectedBand_ actually belongs to a group; Twin x2 highlighted the
-    // same purple-ish blue whenever it does, so linked bands read as
-    // visibly "grouped" at a glance without needing a separate on-graph
-    // indicator.
-    {
-        const bool linked = haveBand && b.harmonicGroup != 0;
-        btnLinkTwin_->setEnabled(haveBand && getBandCount() < ssfilter::kMaxDynEqBands2);
-        btnLinkTwin_->setColors(linked ? Color(60, 90, 150) : Color(58, 62, 70),
-                                 linked ? Color(75, 110, 175) : Color(78, 84, 96),
-                                 Color(230, 232, 236));
-        btnUnlink_->setEnabled(linked);
-        btnUnlink_->setColors(linked ? Color(150, 70, 60) : Color(40, 42, 48),
-                               linked ? Color(175, 85, 75) : Color(52, 55, 61),
-                               linked ? Color(230, 232, 236) : Color(120, 122, 128));
-    }
-
-    // The band Audition was previewing may just have been deleted (or every
-    // band removed) -- don't leave it stuck "on" with nothing left to
-    // preview.
-    if (!haveBand && auditioning_)
-    {
-        auditioning_ = false;
-        setParameterValue(kParamAudition, 0.0f);
-    }
-    refreshAuditionColors();
-
-    repaint();
-}
-
 void UIDynEq2::refreshAuditionColors()
 {
-    // Same blue-ish "monitoring, not the real signal" tint the (now-
-    // deleted) De-esser plugin's own "Listen" button used when engaged.
     btnAudition_->setColors(auditioning_ ? Color(70, 130, 160) : Color(58, 62, 70),
                              auditioning_ ? Color(90, 150, 180) : Color(78, 84, 96),
                              Color(230, 232, 236));
     // Nothing to preview with no band selected -- grayed out and
-    // unclickable (SimpleButton::setEnabled() already does both), same
-    // convention as Compressor Mono/Stereo's own Recalibrate button when
-    // Volume Compensation is off.
+    // unclickable, and Audition itself turned off rather than left armed
+    // with a stale target.
     btnAudition_->setEnabled(selectedBand_ >= 0);
+    if (selectedBand_ < 0 && auditioning_)
+    {
+        auditioning_ = false;
+        setParameterValue(kParamAudition, 0.0f);
+    }
+    repaint();
 }
 
 void UIDynEq2::onNanoDisplay()
@@ -615,15 +303,31 @@ void UIDynEq2::onNanoDisplay()
     fillColor(Color(18, 19, 23));
     fill();
 
-    char bandBuf[32];
-    if (getBandCount() > 0)
-        std::snprintf(bandBuf, sizeof(bandBuf), "Band %d of %d", selectedBand_ + 1, getBandCount());
-    else
-        std::snprintf(bandBuf, sizeof(bandBuf), "No bands");
-    fontSize(13.0f);
-    textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
-    fillColor(Color(220, 223, 228));
-    text(bandLabelX_ + bandLabelW_ * 0.5f, bandLabelY_ + 12.0f, bandBuf, nullptr);
+    fontSize(12.0f);
+
+    // The two editable inline fields -- label to the left, value box.
+    auto inlineField = [&](float fx, float fy, float fw, float fh, const char* labelText, EditTarget target, const char* fmt, double value) {
+        textAlign(ALIGN_RIGHT | ALIGN_MIDDLE);
+        fillColor(Color(180, 184, 192));
+        text(fx - 4.0f, fy + fh * 0.5f, labelText, nullptr);
+        const bool editing = editTarget_ == target;
+        beginPath();
+        roundedRect(fx + 0.5f, fy + 0.5f, fw - 1.0f, fh - 1.0f, 3.0f);
+        fillColor(editing ? Color(235, 195, 60) : Color(34, 37, 43));
+        fill();
+        strokeColor(Color(14, 15, 18));
+        strokeWidth(1.0f);
+        stroke();
+        char buf[32];
+        const char* toShow = buf;
+        if (editing) toShow = editBuffer_.c_str();
+        else std::snprintf(buf, sizeof(buf), fmt, value);
+        fillColor(editing ? Color(20, 20, 24) : Color(220, 223, 228));
+        textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
+        text(fx + fw * 0.5f, fy + fh * 0.5f, toShow, nullptr);
+    };
+    inlineField(trimFieldX_, trimFieldY_, trimFieldW_, trimFieldH_, "Output Trim (dB):", EditTarget::OutputTrim, "%+.1f", dynEqModel_.outputTrimDb);
+    inlineField(smoothFieldX_, smoothFieldY_, smoothFieldW_, smoothFieldH_, "Spectrum Smoothing (ms):", EditTarget::SpectrumSmoothMs, "%.0f", spectrumSmoothMs_);
 
     textAlign(ALIGN_RIGHT | ALIGN_MIDDLE);
     fillColor(Color(180, 184, 192));
@@ -907,8 +611,9 @@ void UIDynEq2::applyMirrorStagingIfComplete(uint32_t index, float value)
     dynEqModel_ = parsed;
     selectedBand_ = getBandCount() > 0 ? std::max(0, std::min(getBandCount() - 1, selectedBand_)) : -1;
     graph_->setSelectedBand(selectedBand_);
+    list_->setSelectedBand(selectedBand_);
     if (selectedBand_ >= 0) setParameterValue(kParamAuditionBand, float(selectedBand_)); // see selectBand()'s own comment
-    refreshBandStripLabels();
+    refreshAuditionColors();
     repaint();
 }
 
@@ -1026,19 +731,10 @@ void UIDynEq2::selectBand(int index)
     // stale target from a previous selection. Harmless while Audition is
     // off: engine_ only reads auditionBandIndex_ when audition_ is true.
     if (selectedBand_ >= 0) setParameterValue(kParamAuditionBand, float(selectedBand_));
-
-    // Solo is a single spotlight, not a per-band setting (see
-    // DynamicEqModel2::soloedBand's own comment) -- if it's currently
-    // engaged, moving the selection moves the spotlight with it. See
-    // ../mb/UIMbCompressor.cpp's identical selectBand() for the full
-    // reasoning (this is the one chokepoint every selection change
-    // already funnels through).
-    if (dynEqModel_.soloedBand >= 0 && dynEqModel_.soloedBand != selectedBand_ && selectedBand_ >= 0)
-    {
-        dynEqModel_.soloedBand = selectedBand_;
-        applyModelToEngine();
-    }
-    refreshBandStripLabels();
+    list_->setSelectedBand(selectedBand_);
+    // Solo stays on the band whose S was clicked (the list shows it per
+    // row); selecting another band doesn't move it.
+    refreshAuditionColors();
 }
 
 // ---- ssgui::IDynEqEditorHost2 -----------------------------------------------
@@ -1290,30 +986,200 @@ void UIDynEq2::unlinkHarmonic(int index)
 void UIDynEq2::beginHarmonicFactorEdit(int sourceIndex)
 {
     if (sourceIndex < 0 || sourceIndex >= int(dynEqModel_.bands.size())) return;
-    editingHarmonicFactor_ = true;
+    if (editTarget_ != EditTarget::None && editTarget_ != EditTarget::HarmonicFactor) commitEdit();
+    editTarget_ = EditTarget::HarmonicFactor;
     pendingHarmonicSourceBand_ = sourceIndex;
-    harmonicFactorEditBuffer_ = "2"; // a sensible starting point -- "standard double" is the most common case, same as the sibling UIEq's own
-    getWindow().focus(); // see ../../statespace's own UIStateSpace.cpp identical call for why
+    editBuffer_ = "2"; // x2, the most common case, as in UIEq
+    getWindow().focus(); // see ../UIStateSpace.cpp's identical call for why
     repaint();
 }
 
 bool UIDynEq2::isEditingHarmonicFactor(int sourceIndex, std::string& liveText) const
 {
-    if (!editingHarmonicFactor_ || pendingHarmonicSourceBand_ != sourceIndex) return false;
-    liveText = harmonicFactorEditBuffer_;
+    if (editTarget_ != EditTarget::HarmonicFactor || pendingHarmonicSourceBand_ != sourceIndex) return false;
+    liveText = editBuffer_;
     return true;
 }
 
 void UIDynEq2::commitHarmonicFactorEdit()
 {
-    if (!editingHarmonicFactor_) return;
+    if (editTarget_ == EditTarget::HarmonicFactor) commitEdit();
+}
+
+void UIDynEq2::beginBandAudition(int index)
+{
+    if (index < 0 || index >= int(dynEqModel_.bands.size())) return;
+    // Snapshot the persistent state before this hold touches kParamAudition
+    // -- a host may echo the write back into auditioning_ before release
+    // (see UIEq::beginBandAudition()).
+    auditionHoldPrevState_ = auditioning_;
+    setParameterValue(kParamAuditionBand, float(index));
+    setParameterValue(kParamAudition, 1.0f);
+}
+
+void UIDynEq2::endBandAudition()
+{
+    if (selectedBand_ >= 0) setParameterValue(kParamAuditionBand, float(selectedBand_));
+    setParameterValue(kParamAudition, auditionHoldPrevState_ ? 1.0f : 0.0f);
+}
+
+void UIDynEq2::beginBandTextEdit(int index, ssgui::DynEqField field, bool clearValue)
+{
+    if (index < 0 || index >= int(dynEqModel_.bands.size())) return;
+    if (editTarget_ != EditTarget::None &&
+        !(editTarget_ == EditTarget::BandField && editBandIndex_ == index && editBandField_ == field))
+        commitEdit();
+
+    editTarget_ = EditTarget::BandField;
+    editBandIndex_ = index;
+    editBandField_ = field;
+
+    if (clearValue) editBuffer_.clear();
+    else
+    {
+        const ssfilter::DynamicEqBand2& b = dynEqModel_.bands[size_t(index)];
+        double v = 0.0;
+        switch (field)
+        {
+        case ssgui::DynEqField::Freq:      v = b.freqHz; break;
+        case ssgui::DynEqField::Bandwidth: v = b.bandwidthOct; break;
+        case ssgui::DynEqField::Gain:      v = b.gainDb; break;
+        case ssgui::DynEqField::Q:         v = b.q; break;
+        case ssgui::DynEqField::Threshold: v = b.thresholdDb; break;
+        case ssgui::DynEqField::Ratio:     v = b.ratio; break;
+        case ssgui::DynEqField::RatioUp:   v = b.ratioUp; break;
+        case ssgui::DynEqField::Range:     v = b.rangeDb; break;
+        case ssgui::DynEqField::Attack:    v = b.attackMs; break;
+        case ssgui::DynEqField::Release:   v = b.releaseMs; break;
+        }
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.6g", v);
+        editBuffer_ = buf;
+    }
+    getWindow().focus();
+    repaint();
+}
+
+bool UIDynEq2::isEditingBandField(int index, ssgui::DynEqField field, std::string& liveText) const
+{
+    if (editTarget_ != EditTarget::BandField || editBandIndex_ != index || editBandField_ != field) return false;
+    liveText = editBuffer_;
+    return true;
+}
+
+void UIDynEq2::beginTrimTextEdit(bool clearValue)
+{
+    if (editTarget_ != EditTarget::None && editTarget_ != EditTarget::OutputTrim) commitEdit();
+    editTarget_ = EditTarget::OutputTrim;
+    if (clearValue) editBuffer_.clear();
+    else
+    {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.6g", dynEqModel_.outputTrimDb);
+        editBuffer_ = buf;
+    }
+    getWindow().focus();
+    repaint();
+}
+
+void UIDynEq2::beginSmoothTextEdit(bool clearValue)
+{
+    if (editTarget_ != EditTarget::None && editTarget_ != EditTarget::SpectrumSmoothMs) commitEdit();
+    editTarget_ = EditTarget::SpectrumSmoothMs;
+    if (clearValue) editBuffer_.clear();
+    else
+    {
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.6g", spectrumSmoothMs_);
+        editBuffer_ = buf;
+    }
+    getWindow().focus();
+    repaint();
+}
+
+bool UIDynEq2::checkInlineDoubleClick(int fieldId)
+{
+    const auto now = std::chrono::steady_clock::now();
+    constexpr std::chrono::milliseconds kDoubleClickWindow(400);
+    const bool isDoubleClick = fieldId == lastClickInlineField_ && (now - lastClickInlineTime_) < kDoubleClickWindow;
+    lastClickInlineField_ = isDoubleClick ? -1 : fieldId;
+    lastClickInlineTime_ = now;
+    return isDoubleClick;
+}
+
+void UIDynEq2::commitEdit()
+{
+    if (editTarget_ == EditTarget::None) return;
+    // std::from_chars is locale-independent (a host may set a comma-decimal
+    // locale).
     double v = 0.0;
-    const auto parseRes = std::from_chars(harmonicFactorEditBuffer_.data(), harmonicFactorEditBuffer_.data() + harmonicFactorEditBuffer_.size(), v);
-    const bool valid = parseRes.ec == std::errc() && std::isfinite(v) && v > 0.0;
-    const int sourceBand = pendingHarmonicSourceBand_;
-    editingHarmonicFactor_ = false;
-    graph_->endHarmonicFactorEdit(); // closes the menu either way, valid or not -- see the sibling UIEq::commitEdit()'s identical comment
-    if (valid) createHarmonicTwin(sourceBand, v);
+    const auto parseRes = std::from_chars(editBuffer_.data(), editBuffer_.data() + editBuffer_.size(), v);
+    const bool valid = parseRes.ec == std::errc() && std::isfinite(v);
+    const EditTarget target = editTarget_;
+    const int bandIndex = editBandIndex_;
+    const ssgui::DynEqField field = editBandField_;
+    const int harmonicSourceBand = pendingHarmonicSourceBand_;
+    editTarget_ = EditTarget::None;
+
+    // The graph's custom-factor input closes its menu either way.
+    if (target == EditTarget::HarmonicFactor) graph_->endHarmonicFactorEdit();
+
+    if (!valid) { repaint(); return; }
+
+    switch (target)
+    {
+    case EditTarget::BandField:
+        // The setters bounds-check bandIndex (the band may have been
+        // deleted meanwhile) and clamp the value.
+        switch (field)
+        {
+        case ssgui::DynEqField::Freq:      setBandFreq(bandIndex, v); break;
+        case ssgui::DynEqField::Bandwidth: setBandBandwidth(bandIndex, v); break;
+        case ssgui::DynEqField::Gain:      setBandGain(bandIndex, v); break;
+        case ssgui::DynEqField::Q:         setBandQ(bandIndex, v); break;
+        case ssgui::DynEqField::Threshold: setBandThreshold(bandIndex, v); break;
+        case ssgui::DynEqField::Ratio:     setBandRatio(bandIndex, v); break;
+        case ssgui::DynEqField::RatioUp:   setBandRatioUp(bandIndex, v); break;
+        case ssgui::DynEqField::Range:     setBandRange(bandIndex, v); break;
+        case ssgui::DynEqField::Attack:    setBandAttack(bandIndex, v); break;
+        case ssgui::DynEqField::Release:   setBandRelease(bandIndex, v); break;
+        }
+        break;
+    case EditTarget::OutputTrim:
+    case EditTarget::SpectrumSmoothMs:
+        setInlineFieldValue(target, v);
+        break;
+    case EditTarget::HarmonicFactor:
+        if (v > 0.0) createHarmonicTwin(harmonicSourceBand, v);
+        break;
+    case EditTarget::None:
+        break;
+    }
+    repaint();
+}
+
+void UIDynEq2::cancelEdit()
+{
+    if (editTarget_ == EditTarget::HarmonicFactor) graph_->endHarmonicFactorEdit();
+    editTarget_ = EditTarget::None;
+    repaint();
+}
+
+void UIDynEq2::setInlineFieldValue(EditTarget which, double v)
+{
+    if (!std::isfinite(v)) return;
+    if (which == EditTarget::OutputTrim)
+    {
+        dynEqModel_.outputTrimDb = std::max(-24.0, std::min(24.0, v));
+        applyModelToEngine();
+    }
+    else if (which == EditTarget::SpectrumSmoothMs)
+    {
+        spectrumSmoothMs_ = std::max(1.0, std::min(5000.0, v));
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%.6g", spectrumSmoothMs_);
+        setState("spectrumSmoothMs", buf);
+    }
     repaint();
 }
 
@@ -1321,27 +1187,20 @@ void UIDynEq2::commitHarmonicFactorEdit()
 
 bool UIDynEq2::onCharacterInput(const CharacterInputEvent& ev)
 {
-    if (editingHarmonicFactor_)
+    if (editTarget_ == EditTarget::None) return false;
+    const char c = ev.string[0];
+    if (c == '\r' || c == '\n') { commitEdit(); return true; }
+    if ((c >= '0' && c <= '9') || c == '.' || c == '-' || c == 'e' || c == 'E' || c == '+')
     {
-        const char c = ev.string[0];
-        if ((c >= '0' && c <= '9') || c == '.' || c == '-' || c == 'e' || c == 'E' || c == '+')
-        {
-            if (harmonicFactorEditBuffer_.size() < 24) harmonicFactorEditBuffer_ += c;
-            repaint();
-        }
-        return true;
+        if (editBuffer_.size() < 24) editBuffer_ += c;
+        repaint();
     }
-    ParamStripWidget* editing = globalStrip_->isEditing() ? globalStrip_ : (bandStrip_->isEditing() ? bandStrip_ : nullptr);
-    if (editing == nullptr) return false;
-    editing->appendChar(ev.string[0]);
     return true;
 }
 
 bool UIDynEq2::onKeyboard(const KeyboardEvent& ev)
 {
-    // Ctrl+Z/Ctrl+Y -- see ../../compressor's UICompressorMono::onKeyboard()
-    // for the full reasoning (checked first, unconditionally, consumed
-    // regardless of whether there's actually anything to undo/redo).
+    // Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) -- checked first, always consumed.
     if (ev.press && (ev.mod & DGL_NAMESPACE::kModifierControl) != 0
         && !(ev.mod & DGL_NAMESPACE::kModifierAlt) && !(ev.mod & DGL_NAMESPACE::kModifierSuper))
     {
@@ -1350,34 +1209,12 @@ bool UIDynEq2::onKeyboard(const KeyboardEvent& ev)
         if (ev.key == 'y' || (ev.key == 'z' && shift)) { onRedo(); return true; }
     }
 
-    if (editingHarmonicFactor_)
+    if (editTarget_ == EditTarget::None)
     {
-        if (!ev.press) return true;
-        if (ev.key == DGL_NAMESPACE::kKeyEnter || ev.key == DGL_NAMESPACE::kKeyTab) { commitHarmonicFactorEdit(); return true; }
-        if (ev.key == DGL_NAMESPACE::kKeyEscape)
-        {
-            editingHarmonicFactor_ = false;
-            graph_->endHarmonicFactorEdit();
-            repaint();
-            return true;
-        }
-        if (ev.key == DGL_NAMESPACE::kKeyBackspace || ev.key == DGL_NAMESPACE::kKeyDelete)
-        {
-            if (!harmonicFactorEditBuffer_.empty()) harmonicFactorEditBuffer_.pop_back();
-            repaint();
-            return true;
-        }
-        return true;
-    }
-
-    ParamStripWidget* editing = globalStrip_->isEditing() ? globalStrip_ : (bandStrip_->isEditing() ? bandStrip_ : nullptr);
-
-    if (editing == nullptr)
-    {
+        // Not typing: Delete/Backspace removes the selected band.
         if (ev.press && (ev.key == DGL_NAMESPACE::kKeyDelete || ev.key == DGL_NAMESPACE::kKeyBackspace))
         {
-            if (selectedBand_ >= 0) removeBand(selectedBand_);
-            return true;
+            if (selectedBand_ >= 0) { removeBand(selectedBand_); return true; }
         }
         return false;
     }
@@ -1387,14 +1224,15 @@ bool UIDynEq2::onKeyboard(const KeyboardEvent& ev)
     {
     case DGL_NAMESPACE::kKeyEnter:
     case DGL_NAMESPACE::kKeyTab:
-        editing->commitEdit();
+        commitEdit();
         return true;
     case DGL_NAMESPACE::kKeyEscape:
-        editing->cancelEdit();
+        cancelEdit();
         return true;
     case DGL_NAMESPACE::kKeyBackspace:
     case DGL_NAMESPACE::kKeyDelete:
-        editing->backspace();
+        if (!editBuffer_.empty()) editBuffer_.pop_back();
+        repaint();
         return true;
     default:
         return true;
@@ -1404,12 +1242,49 @@ bool UIDynEq2::onKeyboard(const KeyboardEvent& ev)
 bool UIDynEq2::onMouse(const MouseEvent& ev)
 {
     const double x = ev.pos.getX(), y = ev.pos.getY();
+    auto inRect = [&](float fx, float fy, float fw, float fh) { return x >= fx && x < fx + fw && y >= fy && y < fy + fh; };
+    const bool onTrimField = inRect(trimFieldX_, trimFieldY_, trimFieldW_, trimFieldH_);
+    const bool onSmoothField = inRect(smoothFieldX_, smoothFieldY_, smoothFieldW_, smoothFieldH_);
+
+    // A press anywhere else ends a text edit first (so finishing an edit
+    // never depends on Enter reaching the plugin window). The graph's
+    // custom-factor input is committed by the graph itself.
+    if (editTarget_ != EditTarget::None && editTarget_ != EditTarget::HarmonicFactor && ev.press)
+    {
+        const bool clickingSameField = (editTarget_ == EditTarget::OutputTrim && onTrimField) ||
+                                        (editTarget_ == EditTarget::SpectrumSmoothMs && onSmoothField);
+        if (!clickingSameField) commitEdit();
+    }
+
+    // Release of an Output Trim / Smoothing press: a drag already applied
+    // its value; a plain click opens the text edit.
+    if (!ev.press && inlinePress_ != EditTarget::None)
+    {
+        const EditTarget released = inlinePress_;
+        const bool wasDragging = inlineDragging_;
+        inlinePress_ = EditTarget::None;
+        inlineDragging_ = false;
+        const bool sameField = released == EditTarget::OutputTrim ? onTrimField : onSmoothField;
+        if (!wasDragging && sameField)
+        {
+            if (released == EditTarget::OutputTrim) beginTrimTextEdit(checkInlineDoubleClick(int(EditTarget::OutputTrim)));
+            else beginSmoothTextEdit(checkInlineDoubleClick(int(EditTarget::SpectrumSmoothMs)));
+        }
+        return true;
+    }
 
     if (ev.press)
     {
-        const bool onSpectrumModeField = x >= spectrumModeFieldX_ && x < spectrumModeFieldX_ + spectrumModeFieldW_ &&
-                                          y >= spectrumModeFieldY_ && y < spectrumModeFieldY_ + spectrumModeFieldH_;
-        if (onSpectrumModeField)
+        if ((onTrimField || onSmoothField) && ev.button == 1)
+        {
+            inlinePress_ = onTrimField ? EditTarget::OutputTrim : EditTarget::SpectrumSmoothMs;
+            inlineDragging_ = false;
+            inlineDragStartY_ = y;
+            inlineDragStartValue_ = onTrimField ? dynEqModel_.outputTrimDb : spectrumSmoothMs_;
+            return true;
+        }
+
+        if (inRect(spectrumModeFieldX_, spectrumModeFieldY_, spectrumModeFieldW_, spectrumModeFieldH_))
         {
             spectrumMode_ = ssfilter::nextSpectrumMode(spectrumMode_);
             graph_->setSpectrumMode(spectrumMode_);
@@ -1420,9 +1295,7 @@ bool UIDynEq2::onMouse(const MouseEvent& ev)
             return true;
         }
 
-        const bool onFftSizeField = x >= fftSizeFieldX_ && x < fftSizeFieldX_ + fftSizeFieldW_ &&
-                                     y >= fftSizeFieldY_ && y < fftSizeFieldY_ + fftSizeFieldH_;
-        if (onFftSizeField)
+        if (inRect(fftSizeFieldX_, fftSizeFieldY_, fftSizeFieldW_, fftSizeFieldH_))
         {
             spectrumFftSizeIndex_ = (spectrumFftSizeIndex_ + 1) % ssfilter::SpectrumAnalyzer::kNumSizePresets;
             char buf[8];
@@ -1434,6 +1307,50 @@ bool UIDynEq2::onMouse(const MouseEvent& ev)
     }
 
     return UI::onMouse(ev);
+}
+
+bool UIDynEq2::onMotion(const MotionEvent& ev)
+{
+    if (inlinePress_ != EditTarget::None)
+    {
+        const double dy = inlineDragStartY_ - ev.pos.getY(); // up = increase
+        if (!inlineDragging_ && std::fabs(dy) > 3.0)
+        {
+            inlineDragging_ = true;
+            if (editTarget_ == inlinePress_) cancelEdit(); // the drag replaces a half-typed value
+        }
+        if (inlineDragging_)
+        {
+            constexpr double kPxFullRange = 200.0;
+            if (inlinePress_ == EditTarget::OutputTrim)
+                setInlineFieldValue(EditTarget::OutputTrim, inlineDragStartValue_ + dy / kPxFullRange * 48.0); // -24..+24dB
+            else // 1..5000ms, log domain
+                setInlineFieldValue(EditTarget::SpectrumSmoothMs, inlineDragStartValue_ * std::exp(dy / kPxFullRange * std::log(5000.0)));
+        }
+        return true;
+    }
+    return UI::onMotion(ev);
+}
+
+bool UIDynEq2::onScroll(const ScrollEvent& ev)
+{
+    const double x = ev.pos.getX(), y = ev.pos.getY();
+    const bool onTrimField = x >= trimFieldX_ && x < trimFieldX_ + trimFieldW_ && y >= trimFieldY_ && y < trimFieldY_ + trimFieldH_;
+    const bool onSmoothField = x >= smoothFieldX_ && x < smoothFieldX_ + smoothFieldW_ && y >= smoothFieldY_ && y < smoothFieldY_ + smoothFieldH_;
+    if (onTrimField || onSmoothField)
+    {
+        const double dir = ev.delta.getY() > 0.0 ? 1.0 : (ev.delta.getY() < 0.0 ? -1.0 : 0.0);
+        const bool fine = (ev.mod & DGL_NAMESPACE::kModifierAlt) != 0; // Alt = 10x finer
+        if (onTrimField && dir != 0.0 && editTarget_ != EditTarget::OutputTrim)
+            setInlineFieldValue(EditTarget::OutputTrim, dynEqModel_.outputTrimDb + dir * (fine ? 0.05 : 0.5));
+        if (onSmoothField && dir != 0.0 && editTarget_ != EditTarget::SpectrumSmoothMs)
+        {
+            const double factor = fine ? 1.008 : 1.08;
+            setInlineFieldValue(EditTarget::SpectrumSmoothMs, dir > 0.0 ? spectrumSmoothMs_ * factor : spectrumSmoothMs_ / factor);
+        }
+        return true;
+    }
+    return UI::onScroll(ev);
 }
 
 void UIDynEq2::uiFileBrowserSelected(const char* filename)

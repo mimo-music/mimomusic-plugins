@@ -78,7 +78,7 @@ inline double softLimitListen(double x)
 // classic downward-compression line above the threshold (gain <= 0,
 // reducing loud material), `ratioUp` shapes the mirrored upward-
 // compression line below it (gain >= 0, lifting quiet material) --
-// "up and down compressing" in one control pair rather than a mode
+// downward and upward compression in one control pair rather than a mode
 // switch, since the two lines are independent and can be dialed in (or
 // left at 1.0, meaning "no effect on this side") simultaneously. Both
 // default to the historical single-`ratio` downward-only behavior when

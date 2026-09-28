@@ -14,10 +14,9 @@
 // strip at a different band index, rather than showing every band's
 // fields at once the way the sibling EQ plugin's BandListWidget does (a
 // deliberate simplification: a compressor band has 5 numeric fields where
-// an EQ band has 3, and unlike an EQ, "select the bands and set up
-// attack/release" was the ask -- see docs/EXTENDING.md's "Multiband
-// compressor GUI" section for the full reasoning and what a future
-// per-band-row list would add on top of this).
+// an EQ band has 3, and the workflow is "select a band, then set it up"
+// -- a per-band-row list is listed under "Possible next steps" in
+// docs/EXTENDING.md).
 //
 // Load/Save (".ssmbjson") and "Export to State-Space..." (an ordinary
 // .ssjson, via Serialization::toJson(assembleStateSpace(...))) follow

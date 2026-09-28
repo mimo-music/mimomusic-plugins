@@ -54,7 +54,11 @@ enum ParameterIndex
     // Sidechain on keeps exactly the same per-mode detector topology,
     // just fed from the key input instead of the main one.
     kParamSidechainEnable,
-    kParamSidechainGain,       // dB trim applied to the external key signal before it reaches the detector, independent of Input Gain (which only affects the signal actually being compressed)
+    // Sidechain Gain, the band filter below, the monitor scope and
+    // Sidechain Listen all act on the trigger signal: the external key
+    // input while Sidechain is on, the gain-staged main signal otherwise
+    // (same as Contour's trigger, see run()).
+    kParamSidechainGain,       // dB trim applied to the trigger signal before the filter and the detector; changes what drives the compressor, not the audio being compressed
 
     // M/S Listen, to hear only Mid or only Side while setting up the
     // compressor -- 0=Off/1=Mid/2=Side. Only
@@ -111,11 +115,11 @@ enum ParameterIndex
 
     // Sidechain amplification and band filtering, to trigger the
     // compressor with sound in one specific part of the spectrum --
-    // amplification is kParamSidechainGain, already existed. This is the
-    // "frequency band" half: a high-pass and low-pass corner in series
-    // (see sscomp::SidechainBandFilter, CompressorDsp.hpp) applied to the
-    // sidechain signal before it reaches the detector, isolating a band
-    // to trigger from. kParamScFilterEnable gates the filter's own DSP
+    // amplification is kParamSidechainGain. This is the "frequency band"
+    // half: a high-pass and low-pass corner in series (see
+    // sscomp::SidechainBandFilter, CompressorDsp.hpp) applied to the
+    // trigger signal (external key or main signal) before it reaches the
+    // detector, isolating a band to trigger from. kParamScFilterEnable gates the filter's own DSP
     // cost specifically, so it uses no DSP when off -- run() skips calling the filter at all while this is
     // off, passing the sidechain signal through unfiltered; the
     // monitor/analyzer below keeps running regardless (see its own
@@ -126,13 +130,10 @@ enum ParameterIndex
 
     // For the sidechain-options panel's waveform + spectrum display --
     // the level/spectrum of
-    // whatever signal is *currently* reaching the detector: the raw
-    // sidechain input while kParamScFilterEnable is off, the filtered
-    // version once it's on (so the filter's effect is visible directly) --
-    // always the
-    // mono-downmixed sidechain signal regardless of kParamSidechainEnable
-    // itself, so the filter can be dialed in before actually engaging
-    // Sidechain. kParamMeterScLevelDb is a simple smoothed peak level,
+    // whatever signal is *currently* reaching the detector: the trigger
+    // signal (external key input or main signal, see kParamSidechainGain)
+    // unfiltered while kParamScFilterEnable is off, filtered once it's on
+    // (so the filter's effect is visible directly), mono-downmixed. kParamMeterScLevelDb is a simple smoothed peak level,
     // read once per block by the GUI's own scrolling level trace (the
     // same "one value per tick, accumulated client-side" technique
     // CompressorGraphWidget::drawGrHistory() already uses -- true

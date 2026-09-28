@@ -1,726 +1,257 @@
-# Matrix Filter (+ Parametric EQ, EQ Mono, Multiband Compressor, Dynamic EQ)
+# MimoMusic State-Space (Matrix Filter, EQs, Multiband Compressor, Dynamic EQs)
 
-Six sibling audio plugins sharing one DSP core:
+Six plugins sharing one state-space DSP core:
 
-- **Matrix Filter** (2-in/2-out) -- a fully generic, directly editable
-  **discrete-time state-space filter**, described below.
-- **Parametric EQ** (2-in/2-out) -- an unbounded-band parametric EQ (click
-  the graph to add a band, drag to shape it), built as a coefficient mapper
-  on the *same* core -- see "Parametric EQ" below. Its "Export to
-  State-Space..." button writes an ordinary `.ssjson` the base plugin opens
-  directly, every resulting `A`/`B`/`C`/`D` coefficient ready for
-  hand-editing.
-- **Parametric EQ Mono** (1-in/1-out) -- the same EQ, same GUI, natively
-  single-channel for mono tracks/busses. Not the stereo plugin with a
-  channel disabled: it assembles into a genuinely mono state-space system
-  needing **half the states per band**, so its `O(order²)` per-sample
-  recursion measures **2.8×-4.4× faster** than the stereo plugin for the
-  same band list. See "Parametric EQ Mono" below.
-- **Multiband Compressor** (2-in/2-out) -- a user-configurable
-  Linkwitz-Riley crossover bank with a threshold/ratio/attack/release/
-  makeup compressor per band, drag the crossover splits directly on the
-  graph -- see "Multiband Compressor" below.
-- **Dynamic EQ** (2-in/2-out) -- FabFilter Pro-Q-style bell
-  bands whose own boost/cut pulls back automatically when that frequency
-  region gets loud, then relaxes back -- a multiband compressor's per-band
-  dynamics, targeted at an EQ bell shape instead of a crossover slice. Its
-  live audio path is a dedicated engine, not a raw state-space matrix, and
-  an Audition button previews whichever band is selected by ear -- see
-  "Dynamic EQ" below. (The De-esser plugin that used to live alongside
-  this one has been retired -- it was one fixed band of this exact same
-  construction, and Dynamic EQ's own Audition now covers the one feature
-  it had that this plugin didn't. Called "Listen" until this project's
-  own rename -- see "Parametric EQ"'s own Audition bullet below for why.)
+- **Matrix Filter** (2 in / 2 out) -- a directly editable discrete-time
+  state-space filter.
+- **Parametric EQ** (2 in / 2 out) -- an EQ with any number of bands, drawn
+  on a large interactive graph.
+- **Parametric EQ Mono** (1 in / 1 out) -- the same EQ for mono signals, at
+  a fraction of the CPU cost.
+- **Multiband Compressor** (2 in / 2 out) -- up to 6 bands with
+  Linkwitz-Riley crossovers.
+- **Dynamic EQ** (2 in / 2 out) -- bell bands whose gain reacts to the
+  level in their own frequency region.
+- **Dynamic EQ 2** (2 in / 2 out) -- Dynamic EQ with shelf types, harmonic
+  band linking and stereo crossfeed.
 
-### Build and install
+## Common to all editors
 
-```
-./build_and_install.sh            # build everything, install LV2 into ~/.lv2/
-./build_and_install.sh --clean    # wipe build/ first (full rebuild)
-./build_and_install.sh --test     # also run the regression suite
-./build_and_install.sh --no-install
-```
+- **Load... / Save As...** (preset formats below), **A / B / Copy**,
+  **Undo / Redo**, **Bypass**, **Reset State** (clears the filter's
+  internal state).
+- **Export to State-Space...** (EQs, Multiband Compressor, Dynamic EQs):
+  writes the current result as a Matrix Filter preset (`.ssjson`), where
+  every coefficient can be inspected and edited.
+- **Value fields**: drag up/down, double-click to type (Enter/Tab
+  confirms, Escape cancels), scroll to nudge -- hold **Alt** for 10x finer
+  steps. The same applies to scrolling over graph nodes.
+- **Spectrum analyzer** behind the graph (EQs, Multiband, Dynamic EQs):
+  **Spectrum Source** Off / In / Out / Both, **Smoothing**, **Resolution**
+  (FFT size 2048–16384), and **Fixed Range / Autoscale**. Only the
+  selected analyzers run.
+- Nothing can be driven unstable: every assembled filter passes a
+  stability guard, backed by a real-time safety net.
+- Coefficient changes are smoothed, and changes of the filter's size
+  (adding, removing, enabling or soloing a band) fade out and back in
+  within about 16 ms, so editing doesn't click.
 
-#### macOS
-
-This project isn't reliably cross-compilable for macOS from a Linux
-checkout -- DPF's macOS backends (Cocoa-based GUI code, plus AU/Audio
-Unit) need the real macOS SDK and toolchain to compile and, just as
-importantly, an actual Mac to verify the result on (cross-compiling via
-osxcross is possible for anyone who wants to pursue it, but isn't
-supported here). `./build_and_install_macos.sh`, run **on a Mac**,
-builds a universal (Apple Silicon + Intel) LV2/VST3/AU set and installs
-into `~/Library/Audio/Plug-Ins/{LV2,VST3,Components}`:
-
-```
-./build_and_install_macos.sh                 # build + install (universal binary)
-./build_and_install_macos.sh --arch arm64    # single-arch, faster while iterating
-./build_and_install_macos.sh --test
-```
-
-Needs Xcode Command Line Tools (`xcode-select --install`); see the
-script's own header for the full flag list. Written carefully but not
-tested end to end (no Mac was available while writing it) -- if something
-doesn't work for your Xcode/macOS version, the CMake/DPF build underneath
-is the same, already-verified one the Linux script uses, so the fix is
-almost certainly in the macOS-specific flags this script layers on top.
-
-### Conventions shared across every plugin here
-
-- **Hover a numeric field/graph node and scroll to nudge its value** --
-  every such control in every plugin in this project (this file's own
-  "Enable/Solo per band" bullet below, every graph's node-scroll-to-
-  adjust-Q, the Multiband Compressor's Ratio-scroll, Matrix Filter's own
-  cell/knot scroll) shares one rule: **hold Alt while scrolling for 10x
-  finer control** -- the same wheel motion moves the value a tenth as
-  far, for the exact spot you're trying to land on precisely. Applied to
-  every scroll-to-nudge gesture project-wide.
+Preset formats: `.ssjson` (Matrix Filter), `.sseqjson` (Parametric EQ /
+Mono), `.ssmbjson` (Multiband Compressor), `.ssdynjson` (Dynamic EQ and
+Dynamic EQ 2).
 
 ## Matrix Filter
 
-A stereo (2-in/2-out) audio plugin that exposes a fully generic, directly
-editable **discrete-time state-space filter**:
+A generic state-space filter:
 
 ```
 x[n+1] = A x[n] + B u[n]
 y[n]   = C x[n] + D u[n]
 ```
 
-`u[n]` is the stereo input, `y[n]` the stereo output, and `x[n]` an internal
-state vector whose size ("order") you choose. Because every entry of `A`,
-`B`, `C` and `D` is independently editable, this one structure can represent
-essentially any causal, **linear, time-invariant** stereo process that fits
-in the chosen order: EQ bands, crossovers, resonators, cross-channel
-coupling (mid/side-style matrices), all-pass sections, etc. It's meant as a
-**building block** -- see [docs/EXTENDING.md](docs/EXTENDING.md) for how to
-build parametric EQ and other higher-level linear processors on top of it
-without touching the DSP core. (A fixed-coefficient state-space model can
-never represent level-dependent gain like compression -- that's a
-mathematical fact of linear time-invariant systems, not a missing feature.
-The model also carries an optional, genuinely state-dependent gain stage
-for exactly this case -- see "Trainable dynamics" below and
-`docs/EXTENDING.md`'s "Why compression needs state-dependent coefficients".)
+`u` is the stereo input, `y` the stereo output and `x` an internal state
+vector of 1 to 128 states. Every entry of A, B, C and D is editable, so it
+can represent any linear, time-invariant stereo filter of that size: EQs,
+crossovers, resonators, cross-channel (mid/side) matrices, all-passes. See
+[docs/EXTENDING.md](docs/EXTENDING.md) for building higher-level
+processors on top of it.
 
-Built with the [DISTRHO Plugin Framework](https://github.com/DISTRHO/DPF)
-(vendored as a submodule), producing **LV2** and **VST3** plugin bundles plus
-a standalone JACK app from one codebase.
+- **Matrix editor** for A/B/C/D: click a cell to edit, arrow keys move to
+  the neighbouring cell, scroll to nudge. Cells are coloured by value
+  (warm positive, cool negative). **+ Order / - Order** resize the model;
+  **Passthrough** and **Silence** load a neutral or silent model.
+- **Bode plot** of the full 2x2 transfer function, updated as you edit.
+  Click a legend entry to show or hide a path (L→L, R→R, and the
+  cross-channel L→R, R→L); LOG/LIN switches the frequency axis.
+- **Normalize 0dB** scales the output (C/D only) so the peak passband gain
+  is exactly 0 dB.
+- **Gain curve (state-dependent gain)**: an optional panel at the bottom
+  scales C/D by a gain that depends on a smoothed input level -- a
+  compressor-like stage on top of the fixed linear filter. It has
+  attack/release fields, an **Apply Curve** helper (threshold, ratio,
+  makeup) and a 25-point gain-vs-level curve you can draw directly
+  (double-click a point to reset it). The `fit_gain_curve` tool can learn
+  this curve from an example input and output recording.
+- `presets/factory/` contains 15 presets, from single filters to
+  multi-band chains.
 
-### Status
+## Parametric EQ / Parametric EQ Mono
 
-Working draft, actively used in Ardour. The DSP core, stability guard,
-transfer-function math and preset serialization are covered by two
-verification tools (see `Testing` below): a fast pure-math regression
-suite, and an audio testbench that runs every factory preset through the
-real engine against synthetic WAV signals, cross-checked against the
-frequency-domain transfer function. Both currently pass on all 15 factory
-presets.
+- **Bands**: click the graph to add a band, drag it (frequency and gain),
+  scroll over it for Q (or BW for a Band Shelf). Hovering or dragging
+  shows its values. Up to 32 bands (the filter's 128-state limit).
+- **Types**: Bell, Low Shelf, High Shelf, Low Pass, High Pass, Notch,
+  Band Pass, All Pass, and **Band Shelf**. Low/High Pass have a slope of
+  12, 24, 36 or 48 dB/octave (in the right-click menu, or by clicking the
+  Gain field in the band list).
+- **Band Shelf**: a flat boost or cut between two corners, set by its
+  centre frequency and a bandwidth in octaves (BW), with gain and Q; it
+  returns to exactly 0 dB outside the corners. Drag the corner handles to
+  change the bandwidth.
+- **Right-click a node** for Delete, Duplicate, every filter type, and
+  **Create Harmonic Twin** (x2, x3, x4, ÷2 or a custom factor): a copy at a
+  harmonic frequency that stays linked in frequency -- move either and
+  the other follows at the same ratio (Band Shelves link by their
+  centre). **Unlink** detaches a band again. Delete a band also by
+  double-clicking it or with Delete/Backspace.
+- **Band list** below the graph: type, **EN**able, **SOLO**, channel,
+  **FREQ**, **BW**, **GAIN**, **Q** and delete per band, all editable as
+  value fields. **+ Band** adds one.
+- **Channel** (stereo version): **Both**, **Left only**, **Right only**,
+  **L→R** or **R→L**. A Left/Right-only band filters only that channel
+  and leaves the other untouched; the graph then shows a separate blue
+  (left) and red (right) curve and spectrum. An **L→R / R→L crossfeed**
+  band filters one channel and adds the result into the other -- e.g. to
+  move a sound from the left over to the right; the overall crossfeed
+  level per direction is set on the graph. Soloing a one-channel band
+  silences the other channel.
+- **Audition**: hear only the selected band's frequency region (a band-pass
+  at its frequency and Q, or between a Band Shelf's corners) instead of
+  the output. Press and drag a node with the right mouse button to
+  audition it while held. Linked harmonic twins are auditioned -- and
+  soloed -- together.
+- **Output Trim**, and a **gain range** label on the graph: click to cycle
+  3/6/12/30 dB, or drag it for any range from 1 to 40 dB.
 
-### Features
-
-- **Generic MIMO state-space core**, order configurable from 1 to 128
-  states, every `A`/`B`/`C`/`D` coefficient directly addressable.
-- **Cannot be driven unstable**: every edit is passed through a stability
-  guard that proves (or, failing that, forces) the state matrix's spectral
-  radius stays below 1, so the recursive filter cannot diverge. A real-time
-  NaN/Inf safety net and output ceiling back this up in case of unforeseen
-  numerical edge cases. See `docs/ARCHITECTURE.md` for exactly how.
-- **No clicks/pops from live coefficient edits**: a same-order edit (any
-  ordinary coefficient tweak or EQ-band drag) is smoothed toward the new
-  values over a few milliseconds rather than switched to instantly, so
-  even a fast edit lands as a quick, smooth glide instead of an audible
-  discontinuity -- fixed after exactly that was reported ("like plugging/
-  unplugging a speaker cable" when dragging fast). An order-changing edit
-  (adding/removing/enabling/soloing an EQ band) can't be smoothed the same
-  way -- there's no meaningful "in between" for two differently-sized
-  state vectors -- so that briefly ducks the output to silence, switches,
-  and fades back in (~16ms total) instead, since that *was* also reported
-  clicking once ordinary dragging was fixed. See `docs/ARCHITECTURE.md`'s
-  "Real-time engine" section.
-- **GUI matrix editor** for A/B/C/D -- click a cell to edit it (pre-filled
-  with its current value), double-click to clear it first, Enter/Tab
-  commits, Escape cancels, arrow keys commit-and-jump to the neighboring
-  cell, scroll wheel nudges a value -- with live order (matrix size)
-  resizing. Cells are colored as a diverging heatmap (warm = positive, cool
-  = negative, scaled to the matrix's own peak magnitude) so structure in
-  bigger matrices is visible at a glance instead of a wall of numbers.
-- **Bode plot** of the full 2x2 transfer function, recomputed as you edit.
-  Click a legend swatch to show/hide that channel pair's curve (the two
-  direct paths L->L/R->R, shown by default, and the two cross-channel paths
-  L->R/R->L, hidden by default since most models have no cross-coupling);
-  the magnitude (y) axis autoscales to whichever curves are currently
-  visible, and the visibility choice is remembered (persisted through the
-  host's session state) across closing/reopening the plugin. A LOG/LIN
-  toggle (top-right of the plot) switches the frequency axis.
-- **"Normalize 0dB" button**: rescales the output (C/D only, so stability
-  is untouched) so the model's peak passband gain is exactly unity/0 dB,
-  regardless of filter shape.
-- **Save/Load** presets as plain JSON (`.ssjson`) via native file dialogs
-  that remember the last folder used (persisted through the host's session
-  state, so it survives closing/reopening the plugin), plus automatic
-  session/project recall of the whole model through the host (LV2/VST3
-  state).
-- **Coefficient-mapper pattern + worked examples**: RBJ "Audio EQ Cookbook"
-  biquad formulas (lowpass/highpass/peaking/shelves/notch/bandpass/allpass)
-  realized as state-space blocks, plus a series-cascade helper for
-  multi-band chains (`makeStereoBiquadChain()`), demonstrating how to build
-  a musical parameter layer (e.g. a parametric EQ UI) on top of the raw
-  matrix engine. 15 factory presets in `presets/factory/` exercise all of
-  this, from single filters to multi-band chains.
-- **Trainable dynamics (state-dependent gain stage)**: `A`/`B` stay fixed
-  (and stability-guarded) forever, but an optional per-model
-  `NonlinearSchedule` lets `C`/`D` scale every sample by a gain that's a
-  function of a smoothed input-level envelope -- a mathematically
-  legitimate, standard control-theory construction (state-dependent
-  coefficients / gain scheduling), not a bolted-on post-processor. A GUI
-  panel (bottom of the window) has an Enable toggle, editable
-  attack/release fields, a threshold/ratio/makeup "Apply Curve" button for
-  classic-compressor-style one-click shaping, and a click/drag/scroll
-  graph for freehand-sculpting the 25-knot gain-vs-level curve directly
-  (double-click a knot to reset it to 0dB/flat).
-  Or **learn it from audio** instead: the `fit_gain_curve` CLI tool takes
-  an example input WAV and a desired output WAV and fits attack/release
-  plus the whole curve via least squares (its output loads normally, and
-  is then just as editable in the GUI panel as a hand-drawn curve). See
-  `docs/ARCHITECTURE.md`'s "NonlinearSchedule" section and
-  `docs/EXTENDING.md`'s "Why compression needs state-dependent
-  coefficients" for the full story (including a real frequency-dependence
-  bug found and fixed along the way).
-- **Multiband compression (DSP core + CLI trainer; no GUI/plugin yet)**:
-  the same state-dependent-gain mechanism above, generalized to N
-  independent bands. A Linkwitz-Riley crossover (`mappers::
-  makeStereoCrossoverBank()`, up to `kMaxBands=6` bands, itself an
-  ordinary LTI parallel filter bank -- flat/inaudible whenever every
-  band's own gain is 0dB) splits the signal into bands; each band gets its
-  *own* envelope follower (tracking that band's own filtered signal, not
-  the broadband input) and its own `NonlinearSchedule`/gain curve, summed
-  back into the output. `A`/`B` are, as always, completely unaffected.
-  `fit_multiband_compressor` learns all N curves at once from one (input,
-  reference-compressed-target) audio pair: `fit_multiband_compressor
-  "<crossover_hz_csv>" input.wav target.wav out.ssjson` -- e.g.
-  `fit_multiband_compressor "150,2000" mix.wav mix_compressed.wav
-  out.ssjson"` for a 3-band split. The output is an ordinary `.ssjson`
-  (its A/B/C/D *is* the crossover bank itself), loadable and hand-editable
-  in this same matrix grid exactly like any other preset. See
-  `docs/EXTENDING.md`'s "Multiband compression" section for the mechanism
-  and a real phase-alignment bug found while building the trainer.
-
-## Parametric EQ
-
-A parametric EQ, built as a worked example of the coefficient-mapper
-pattern above (`plugin/dsp/EqModel.hpp`) rather than a mode of the base
-plugin -- see `docs/ARCHITECTURE.md`'s "EqModel / EQ plugin" section for
-why that split. Inspired by (not a clone of) FabFilter Pro-Q's
-interaction model: a big interactive graph is the primary surface, not a
-bank of knobs.
-
-### Features
-
-- **Unbounded band count** -- click anywhere on the graph to add a Bell
-  band right there; drag it to reshape (frequency + gain), scroll to
-  adjust Q, with a small readout ("1.20kHz  +3.5dB  Q 1.10") tracking the
-  node above your finger the whole time. In practice capped only by
-  `kMaxOrder` (128 states / 4 per band = 32 bands, comfortably past
-  FabFilter Pro-Q's advertised 24), not by any smaller, arbitrary limit --
-  "the more complex it gets, the more coefficients it costs" is the
-  actual, honest tradeoff, not a marketing-driven band cap.
-- **Three equivalent ways to delete a band**: double-click its node,
-  select it and press Delete/Backspace, or right-click it for a small
-  context menu (Delete, **Duplicate** -- an exact copy inserted right next
-  to it and selected, same type/freq/gain/Q/slope, ready to drag apart --
-  plus every filter type as a direct pick).
-- **Create Harmonic Twin** (same right-click menu): adds another band at
-  a harmonic frequency of the one you clicked -- x2 (Octave), x3, x4,
-  ÷2, or a typed **Custom Factor...** -- copying its type/gain/Q, and
-  links the two together *in frequency only*: drag, scroll-nudge, or
-  type a new frequency on **either** one and the other follows,
-  preserving the ratio. **Unlink** (same menu, shown once a band is
-  linked) detaches it again without moving it. Chain further twins onto
-  an already-linked band to build a whole harmonic series (root, x2, x3,
-  x4, ...) -- each member's own ratio is tracked independently, so
-  deleting or unlinking one out of the middle never disturbs how the
-  others move relative to each other. No "relink" is offered once
-  unlinked -- deliberately.
-- **Right-click a node**: a plain click (press and release without
-  dragging) opens the usual context menu (Delete/Duplicate/type picks/
-  Create Harmonic Twin/Unlink). Press and drag instead (past a small dead
-  zone, same click-vs-drag split every drag gesture in this project uses)
-  and the menu never opens at all -- the band becomes draggable and
-  momentarily Auditions for as long as the button stays down, restoring
-  whatever Audition was actually doing before on release. See the
-  **Audition** bullet below for what that preview actually does and why
-  it replaced an earlier middle-click-hold-to-solo gesture.
-- **Band Shelf**: a flat-topped boost or cut between two corners, set as
-  a centre frequency (FREQ) and a bandwidth in octaves (BW), with one Q
-  and one gain -- built as a High Shelf at the low corner, a Low Shelf at
-  the high corner and a flat -G over the whole band, so it returns to
-  exactly 0dB outside the corners. On the graph its node sits at the
-  centre; the handles at each corner drag the bandwidth, and scrolling
-  over it changes the bandwidth instead of Q.
-- **All 8 RBJ filter types per band**, plus Band Shelf: Bell, Low Shelf,
-  High Shelf, Low Pass, High Pass, Notch, Band Pass, All Pass -- selected from the band
-  list below the graph or the graph's own right-click menu (a type has
-  no discoverable, precise place on a small draggable node otherwise).
-  A Low/High Pass band also gets a **steepness** choice (12/24/36/48
-  dB/octave -- 1 to 4 cascaded copies of the same biquad at your own Q,
-  not a fixed Butterworth override), in that same right-click menu *and*
-  in the band list's own Gain column: Low/High Pass bands have no
-  meaningful gain (see `eqBandTypeHasGain()`), so that field slot shows
-  "24dB/o" etc. instead and cycles 12->24->36->48->12 on a plain click,
-  the same "fixed set of options, click to cycle" convention the Type
-  button next to it already uses.
-- **Live combined + per-band curves**, redrawn on every single drag event
-  at no perceptible cost regardless of band count -- computed directly
-  from each band's closed-form biquad response (a basic LTI identity:
-  series cascade = product of transfer functions) rather than the
-  generic dense-matrix solve the base plugin's Bode plot uses, which
-  would be far too slow to redraw per-frame at high band counts. See
-  `docs/ARCHITECTURE.md` for the actual benchmarked numbers behind that
-  choice.
-- **Adjustable gain-axis range**: a "±Ndb" label on the graph cycles
-  through 3/6/12/30 dB on a click, or **press and drag it vertically for
-  continuous, precise control** anywhere from 1 to 40dB -- tight for
-  careful, sensitive-to-drag moves, wide for aggressive swings that still
-  need to stay reachable.
-- **Hovering a node shows its exact freq/gain/Q**, the same small readout
-  that appears while dragging one -- discoverable without needing to grab
-  it first.
-- **Live pre-EQ and/or post-EQ spectrum** (real FFT, 384 log-spaced bands
-  for a dense, smooth-looking curve each -- every band still sums *actual*
-  FFT bin power within its own edges, never interpolates between bins, so
-  more bands is genuinely more real display resolution, not a smoother
-  curve fitted through the same underlying numbers), drawn behind the curves, with
-  its own scale labeled on the graph's right edge (in a neutral color
-  distinct from the EQ curve's left-edge gain axis, since the two mean
-  different things). Its vertical range is a **fixed range by default**
-  (a click-to-toggle "Fixed Range"/"Autoscale" label, top-right of the
-  graph); switching to Autoscale refits the range to whichever trace(s)
-  are showing (the *union*, so "Both" gets one shared, meaningful axis),
-  smoothly drifting toward the new fit rather than snapping to it every
-  frame -- autoscaling was the original always-on behavior, but a
-  per-frame-snapping axis under real program material read as visually
-  disturbing, so it's now opt-in and gentler when on. A
-  "Spectrum Source" field cycles Off -> In -> Out -> Both, **defaulting to
-  Both**: two entirely
-  independent analyzers run under the hood (one fed the signal before the
-  EQ, one after), and only the one(s) actually selected are fed at all --
-  switching to a single side, or Off, means the other's FFT cost genuinely
-  isn't paid, not just hidden from view. In "Both", the input trace (warm
-  orange) draws as a thin outline so it never muddies the output trace
-  (cool blue, filled, the more important of the two) where they overlap,
-  with a small color-key legend confirming which is which. An adjustable
-  smoothing time constant ("Spectrum Smoothing (ms)") controls how
-  fast/twitchy vs. slow/buttery it looks, and a "Spectrum Resolution"
-  control cycles the FFT size (2048/4096/8192/16384) -- bigger trades a
-  bit more buffering latency for finer low-frequency detail (an
-  improvement that's inherently most
-  visible at the low end, since FFT bins are linearly spaced while the
-  display bands are log-spaced).
-- **Enable/Solo per band**, a precise numeric Freq/Gain/Q field per band
-  (click-to-edit, click-and-drag up/down, hover-and-scroll-to-nudge --
-  Freq at a gentle 2% per notch, Q at 8%, Gain in 0.5dB steps, and
-  **Alt+scroll for 10x finer control on any of them**, same
-  convention every scroll-to-nudge gesture in this whole project family
-  now shares -- see "Conventions shared across every plugin here" above --
-  and double-click-to-clear-
-  then-type, same as the graph's own nodes) in a scrollable band list,
-  each column now labeled by a small title row above it (TYPE/EN/SOLO/
-  FREQ/BW/GAIN/Q), and an output trim control (click to type, drag or
-  scroll to change).
-- **Audition**: preview the selected band's own isolated frequency
-  region (a genuine bandpass tap at that band's freq/Q, scaled by its
-  own gain, independent of its actual Type/shape) instead of the real
-  output, for finding or tuning a problem frequency by ear -- same idea,
-  same button, as the sibling Dynamic EQ plugin's own Audition. Also
-  reachable as a momentary preview: press-and-drag (not a plain click,
-  see the right-click bullet above) a node to audition it while the
-  button stays down, release to stop, restoring whatever Audition was
-  doing before. Previously a middle-click-and-hold gesture that toggled
-  per-band Solo instead (middle-click was uncomfortable, and Audition is
-  the more useful thing to preview with a quick hold in the first place).
-  A Band Shelf previews the region between its two corners. Named
-  "Audition", not the originally-shipped "Listen": "Listen" invited the
-  expectation of hearing what the band's own EQ curve does to the mix
-  (gain-dependent, like a solo/bypass A/B), when what it's always
-  actually done is isolate the raw frequency region the band's freq/Q
-  names. If the previewed band is part of a **Harmonic Twin** group, every
-  other member of that group previews *with* it (summed together), not
-  just the one band clicked -- previewing only the clicked half of a
-  linked pair would be misleading when the whole point of linking them is
-  that they're meant to be heard, and thought about, together. Ordinary
-  per-band **Solo** (the band list's "S" toggle) has the identical rule:
-  soloing one member of a harmonic group also unmutes every other member
-  of that same group.
-- **Per-band channel routing (Both/Left Only/Right Only)**: each band's
-  own "Ch" toggle in the band list (click to cycle, same idiom as the
-  Type button) restricts it to filtering just one stereo channel instead
-  of both. A Left/Right-only band leaves the *other* channel completely untouched
-  by it (no phase shift, no gain -- not merely "unheard"), while every
-  other Both band still applies to both channels normally; the two
-  channels only ever end up genuinely, independently filtered once at
-  least one band asks for that. Visible three ways at once: the band
-  list's own "L"/"R" toggle color (blue/red), a matching **ring drawn
-  around that band's node** on the graph (always visible, not just on
-  hover/selection), and the graph's own transfer
-  curve, which splits into two colored curves (same blue/red) the instant
-  any band is Left/Right-only -- a single curve would otherwise silently
-  misrepresent whichever channel it doesn't reach. The background
-  spectrum does the same: the moment channel routing actually differs,
-  the single combined "Post-EQ" trace is replaced by two separate ones,
-  **Left in blue, Right in red**, each fed from that
-  channel's own real output signal; everything reverts to the ordinary
-  single-trace/single-curve view the instant every band goes back to
-  Both, with no separate toggle needed for any of it. **Soloing a Left/
-  Right-only band silences the channel it never reaches**, rather than
-  leaving it as a raw, unfiltered passthrough of the input: without this,
-  soloing a channel-restricted band correctly
-  isolated its own filtering, but the untouched channel would just play
-  the source unprocessed, defeating the point of soloing it in the first
-  place. Only while a solo is actually active -- an ordinary Left/Right-
-  only band with nothing soloed at all still legitimately leaves the
-  other channel as passthrough, since that's the routing feature working
-  as intended.
-- **Export to State-Space...**: writes the assembled, stability-enforced
-  result as an ordinary `.ssjson` -- open it in Matrix Filter's own
-  "Load..." to see and hand-edit every resulting coefficient. No bespoke
-  interchange format: it's the exact same file format and
-  `Serialization` code both plugins share.
-- **Save/Load** its own band-list presets (`.sseqjson`) the same way the
-  base plugin saves/loads `.ssjson` -- native file dialogs, remembered
-  last folder, automatic session/project recall through the host.
-- Cannot be driven unstable, for the same reason the base plugin can't:
-  every assembled result passes through the same `StabilityGuard`.
-
-## Parametric EQ Mono
-
-The 1-in/1-out variant of Parametric EQ, for projects where only mono is
-used. **The GUI and every EQ feature listed above are identical** -- the
-graph, band list, spectrum, presets and all interactions are literally the
-same widget code, because a band list (`ssfilter::EqModel`) has no channel
-count of its own. Only what it assembles into differs. The one exception
-is per-band channel routing: with only one channel to begin with, "Left
-Only"/"Right Only" have nothing to mean here, so the band list's own "Ch"
-column simply doesn't appear on this plugin -- every band is implicitly
-Both, same as always.
-
-The point is DSP load. This is *not* the stereo plugin with one channel
-switched off: the stereo EQ realizes each band as two independent biquads
-(one per channel, 4 states/band), while this one realizes a single SISO
-chain (2 states/band). Since the engine's dominant per-sample cost is the
-`O(order²)` `A`-matrix recursion, halving the order quarters that cost.
-Measured end-to-end, mono vs. stereo engine on identical band lists:
-
-| Bands | Stereo order | Mono order | Speedup |
-|-------|--------------|------------|---------|
-| 4     | 16           | 8          | 3.1×    |
-| 8     | 32           | 16         | 2.8×    |
-| 16    | 64           | 32         | 4.2×    |
-| 24    | 96           | 48         | 3.9×    |
-| 32    | 128          | 64         | 4.4×    |
-
-(Approaching the theoretical 4× as the band count grows and the fixed
-per-sample overhead stops dominating.)
-
-Correctness is pinned by `dsp_regression` test `[14]`, which checks that
-the mono engine's output is **sample-for-sample identical** to the stereo
-engine's on one channel for the same band list -- they're the same LTI
-system, so anything else would mean the mono realization is wrong -- while
-using exactly half the states to produce it.
-
-Its "Export to State-Space..." still writes a *stereo* `.ssjson` (both
-channels identical), since Matrix Filter -- the only plugin that can
-import one -- is stereo-only. That's an inspection/hand-editing path; the
-mono audio engine itself always runs the mono-assembled system.
+**Parametric EQ Mono** has the same editor and features, without the
+channel column. It builds a genuinely single-channel filter with half
+the states per band, which makes it 2.8x to 4.4x faster than the stereo
+EQ on the same bands; its output is identical sample for sample to one
+channel of the stereo EQ. Its export writes a stereo preset with both
+channels equal.
 
 ## Multiband Compressor
 
-A GUI on top of the multiband compression mechanism described above
-(`plugin/dsp/MbCompressorModel.hpp`, `MultibandSchedule`) -- select a band,
-shape its threshold/ratio/attack/release/makeup, drag its crossover split
-directly on the frequency graph. Reuses the sibling EQ plugin's own
-Load/Save/Export/spectrum conventions, and ports the click-to-edit/drag-
-fader/scroll-nudge numeric fields from the sibling `../compressor`
-project. Its own Spectrum Source defaults to **Both** (moved off the
-shared `kDefaultSpectrumMode` default -- now leaving EQ Mono as the only one of the four plugins with
-this feature still on it -- same "own default" precedent the Parametric/
-Dynamic EQ plugins' own identical fields already set).
-
-### Features
-
-- **User-configurable band count**: click "+ Band" (splits the currently
-  widest band at its own geometric-mean frequency) or double-click inside
-  a band's own region on the graph to split it there; double-click a
-  crossover handle, or select a band and press Delete/Backspace, to merge
-  it back into a neighbor. Capped at `kMaxBands` (6) -- refuses rather
-  than silently dropping a band past that.
-- **Crossover Slope**: 12/24/36/48 dB/oct (`MbCompressorModel::lrOrder`),
-  click-to-cycle in the global fields row -- the same four choices as the
-  EQ plugin's own Low/High Pass "Slope" control, applied uniformly to
-  every crossover split in the band-splitting network (Linkwitz-Riley
-  crossovers, flat/inaudible at 0dB regardless of the chosen order).
-- **Drag crossover splits directly on the graph** -- an absolute
-  position->frequency mapping (like dragging an EQ node), clamped so
-  adjacent splits can never cross or collapse to zero band width, with a
-  live "1.20kHz" readout near the split while dragging (or just hovering)
-  it. Each band's own region is shaded in its own color (the same
-  8-color palette the EQ plugin cycles band colors from) and labeled with
-  its threshold/ratio at a glance.
-- **Live gain-reduction/makeup meter for the selected band**: a bipolar
-  bar (0dB in the middle, filling down for a cut, up for a boost now that
-  Up Ratio can lift a quiet passage) shown right on the graph, with a dB
-  scale down its side and the live number and the band's own configured
-  Makeup value both printed large and labeled ("GAIN"/"MAKEUP") rather
-  than as small corner text. The live number is also smoothed in time
-  (not just redrawn less often) before it's ever printed or used to
-  position the fill -- the raw reading can change several dB within a
-  handful of milliseconds during an attack/release, which reads as
-  flickering, unreadable digits otherwise.
-- **A global Output Gain**, applied uniformly to both channels after
-  every band's own compression -- the field strip's "Output Gain" (labeled
-  "Output Trim" internally/in JSON presets, unchanged for compatibility).
-- **Click a band's region to select it**, then shape it with a
-  click-to-edit / click-and-drag-vertical-fader / scroll-to-nudge field
-  strip (Threshold/Ratio/Up Ratio/Attack/Release/Makeup) -- **Up Ratio**
-  is genuine upward compression, mirroring Ratio below the threshold
-  instead of above it (lift quiet material at the same time loud material
-  is pulled down, from one shared threshold); `1.0` means no upward effect
-  (the default). The click-drag fader
-  interaction is ported from the sibling `../compressor` project's
-  `ParamStripWidget`, this project's first widget with that interaction
-  (the base plugin's matrix cells and gain-curve knots deliberately left
-  it out; see that widget's own header comment for why it's safe here).
-  Scroll over a band's region (no click needed) adjusts its Ratio
-  multiplicatively, the same "scroll the curve to shape it" convention the
-  `../compressor` project's own graph uses for Knee.
-- **Enable per band**: a disabled band's own audio still plays, just
-  uncompressed (dynamics bypassed).
-- **Solo**: a single spotlight, not a per-band flag (unlike the EQ
-  plugin's own multi-band solo, which suits its all-bands-visible list) --
-  since only one band's controls are shown/edited at a time here, Solo
-  always follows whichever band is currently selected. Selecting a
-  different band while Solo is on moves the spotlight with it, so it's
-  never possible for Solo to be pointed at a band you're not looking at.
-  The soloed band's own region is labeled "(solo)" directly on the graph.
-- **Live pre-/post-compression spectrum**, the exact same mechanism
-  (fixed-by-default/toggleable-autoscale range, dual-trace visual
-  hierarchy, Off/In/Out/Both source control, adjustable smoothing and
-  FFT-resolution) as the EQ plugin's own -- see that section above for the
-  full description.
-- **Export to State-Space...**: writes the assembled crossover bank (with
-  every band's gain curve baked in) as an ordinary `.ssjson` -- open it in
-  Matrix Filter's own "Load..." to see and hand-edit every resulting
-  coefficient, exactly like the EQ plugin's identical button.
-- **Save/Load** its own preset format (`.ssmbjson`) -- crossover
-  frequencies + per-band settings, the same convention as the EQ plugin's
-  `.sseqjson`. A preset produced by the `fit_multiband_compressor` CLI
-  trainer (see above) is a `.ssjson`, not a `.ssmbjson` -- it's already the
-  fully-assembled result, loadable directly in Matrix Filter or hand-
-  edited there; there is no in-GUI "train from audio" workflow yet (see
-  `docs/EXTENDING.md`'s "Multiband compressor GUI" section for what's
-  deferred and why).
-- Cannot be driven unstable, for the same reason every plugin in this
-  project can't: the assembled crossover bank passes through the same
-  `StabilityGuard` before ever reaching the engine.
+- **Bands**: **+ Band** splits the widest band, double-clicking inside a
+  band splits it there; double-click a crossover handle, or **Delete
+  Band**, to merge. Up to 6 bands. Drag a crossover directly on the
+  graph; **Crossover Slope** 12/24/36/48 dB/octave applies to all
+  crossovers (flat when no band compresses).
+- **Per band**: **Threshold, Ratio, Up Ratio, Attack, Release, Makeup** --
+  Up Ratio lifts material below the threshold (upward compression; 1.0 =
+  off). Select a band by clicking its region or with **< / >**; scroll
+  over a region to change its Ratio. **Enabled** bypasses a band's
+  dynamics; **Solo** plays only the selected band.
+- **Graph**: each band's region is shaded and labelled with its threshold
+  and ratio; the selected band shows a live gain-reduction/makeup meter.
+- **Output Gain** for both channels after all bands.
+- The `fit_multiband_compressor` tool learns all bands' gain curves from
+  an example input and a compressed target recording and writes a
+  Matrix Filter preset.
 
 ## Dynamic EQ
 
-FabFilter Pro-Q-style bell bands that also carry their own threshold/
-ratio/range/attack/release -- a multiband compressor's per-band dynamics,
-targeted at an EQ bell shape instead of a crossover slice, which was the
-literal ask this plugin was built to answer. Unlike every plugin above,
-its live audio path is not a raw state-space matrix at all -- see
-`docs/EXTENDING.md`'s "Dynamic EQ" section for why an overlapping,
-continuously gain-varying bell needed a genuinely new mechanism (a
-classical Regalia-Mitra fixed-allpass construction) and its own dedicated
-real-time engine, `plugin/dsp/DynamicEqEngine.hpp`.
+Bell bands that also carry **Threshold, Ratio, Up Ratio, Range, Attack
+and Release**: a band's boost or cut moves when its own frequency region
+gets loud (Ratio) or quiet (Up Ratio), by at most Range.
 
-### Features
+- **+ Band** adds a band; drag its node to set frequency and resting gain,
+  scroll for Q, double-click to remove. **Delete Band**, and **< / >** to
+  select. A new band starts with Threshold and Range at 0 dB, i.e. as a
+  plain static bell.
+- The selected band's values are edited in the field strip above the
+  graph. **Enabled**, **Solo** (plays only the selected band) and
+  **Dynamics** (switches the band between moving and static).
+- **Graph**: a shaded area shows how far each band can move, and the
+  bright curve shows the actual, current gain moving with the music. The
+  node readout shows the live gain of bands with dynamics.
+- **Ch**: Both, Left only or Right only per band; a one-channel band also
+  detects only its own channel's level.
+- **Audition**: hear the selected band's detector signal (the frequency
+  region it measures), scaled by its current gain reduction -- for tuning
+  a band by ear. Switching Audition fades through a brief silence.
+- Export writes the resting-gain EQ (a moving filter has no fixed
+  coefficients).
 
-- **Drag a node to place a band** (frequency + resting gain, exactly like
-  the parametric EQ's own graph, with the identical live "1.20kHz +3.5dB
-  Q 1.10" readout above the node while dragging *or just hovering* it),
-  scroll to adjust its bandwidth (Q), double-click to remove -- every band
-  is the same bell shape, so there's no type menu to reach for. A freshly
-  placed band starts with Threshold at 0dB and Range at 0dB -- inert,
-  behaving exactly like a plain static bell until you actually dial
-  dynamics in, rather than already reacting at some default
-  threshold/range you haven't touched yet. A band
-  with dynamics on always shows a second "Live +N.NdB" line below that
-  readout -- the band's real, currently-running gain (the same reading the
-  moving curve below is drawn from), permanently visible rather than only
-  appearing once it happens to differ from the resting gain, so the box
-  doesn't change shape as that gap opens and closes. A band with dynamics
-  *off* has no such line -- it can never move, so the resting gain shown
-  above is already the whole story.
-- **Threshold/Ratio/Up Ratio/Range/Attack/Release per band**, edited via a
-  click-to-edit / click-and-drag-fader / scroll-to-nudge field strip
-  re-targeted at whichever band is selected (the same `ParamStripWidget`
-  interaction the multiband compressor uses) -- `Ratio` pulls gain down
-  above the threshold (peak limiting, the original purpose), `Up Ratio`
-  mirrors it below the threshold (lifting quiet material instead), and
-  both share the same `Range` ceiling on how far gain is allowed to move
-  in whichever direction is active, so a band can never be pulled further
-  than intended even on a very loud (or very quiet) passage.
-- **A shaded "dynamic range" region and a live, moving combined curve**
-  on the graph: the shaded area shows the frequency-shaped envelope a
-  band's gain can move within (its response curve at the extremes its own
-  Ratio/Up Ratio can actually reach -- `gainDb - rangeDb` and/or
-  `gainDb + rangeDb`); the brighter curve on top is drawn from each band's
-  *actual, currently-running* gain and visibly moves/wiggles as program
-  material crosses each band's threshold.
-- **Enable/Solo/Dynamics per band**: Enable works exactly like the EQ
-  plugin's own; Solo is a single spotlight that follows the selected band
-  (same convention as the Multiband Compressor's own -- see that
-  section's own bullet for the full reasoning), not a per-band flag;
-  Dynamics toggles a band between "moving" and a plain static bell at its
-  resting gain, without needing to zero out Range to get the same effect.
-- **Audition**, per selected band: previews that band's isolated detector
-  output (a genuine, magnitude-shaped bandpass tap -- the same one the
-  band's own dynamics are actually measuring level from), scaled by
-  whatever gain reduction it's currently applying -- for tuning
-  Frequency/Q/Threshold/Range/Attack/Release entirely by ear, the same
-  idea (and formula) the now-retired De-esser plugin's own "Listen" used
-  (renamed here -- see the Parametric EQ's own Audition bullet for why),
-  generalized here to "preview whichever band is selected" since this
-  plugin can hold several. Grayed out with nothing selected; switching
-  bands while auditioning follows the selection automatically. Turning
-  Audition on or off (or switching which band it previews) **ducks
-  through a brief silence instead of switching instantly** -- the exact
-  same technique this project's own order-change edits already use (see
-  `docs/ARCHITECTURE.md`): swapping the output between "the real filtered
-  signal" and "an isolated detector tap" is a jump between two unrelated
-  waveforms no amount of internal filter-state continuity can smooth over,
-  so it clicked just as audibly as an order change did, and is fixed the
-  same way.
-- **Per-band channel routing (Both/Left Only/Right Only)**: a "Ch:
-  Both"/"Ch: Left"/"Ch: Right" toolbar button, click-to-cycle, re-targeted
-  at whichever band is selected -- same feature and same visible-three-
-  ways treatment as the Parametric EQ's own identical bullet above (band
-  ring on the graph, the transfer curve splitting into blue/red, the
-  spectrum's single Post-EQ trace splitting into separate Left/Right
-  ones), just reached through this plugin's own toolbar-button-per-band-
-  property convention (see this section's own Enable/Solo/Dynamics
-  bullet) rather than a band-list column, since this plugin has no
-  BandListWidget of its own. A Left/Right-only band's detector reads
-  *only* that one channel's own level too, not the combined max(L,R) a
-  Both band still uses -- so its dynamics react solely to what's actually
-  happening on the channel it's assigned to. **Soloing a Left/Right-only
-  band silences the channel it never reaches** -- same behavior, same
-  reasoning, as the Parametric EQ's own identical bullet above (see that
-  one for the full "why").
-- **Live pre-/post-EQ spectrum**, the identical mechanism as the EQ
-  plugin's own -- both default to Both for the spectrum source itself
-  (unlike EQ Mono, which still defaults to Output-only; the Multiband
-  Compressor now also defaults to Both -- see that section's own note);
-  this plugin's own default is additionally the
-  largest FFT preset, 16384 (not the shared 8192).
-- **Export to State-Space...**: writes a *frozen, resting-gain* snapshot
-  (an ordinary RBJ bell cascade, the same math the parametric EQ plugin
-  uses) as an `.ssjson` -- a deliberate simplification, since a moving
-  filter has no fixed-coefficient representation to freeze into at all;
-  see `docs/ARCHITECTURE.md` for the full reasoning.
-- **Save/Load** its own preset format (`.ssdynjson`), the same convention
-  as every sibling plugin's own extension.
-- The real-time engine's own filter shapes are fixed by construction
-  (only ever a level-dependent scalar combination on top of them, never a
-  moving pole) -- there is no arbitrary-matrix editing path here to
-  destabilize in the first place, unlike the base plugin.
+## Dynamic EQ 2
+
+The dynamics of Dynamic EQ (threshold, ratio, up ratio, range, attack,
+release per band, the shaded range and the live curve) with the
+Parametric EQ's editor and more band types:
+
+- **Graph** as in the Parametric EQ: click to add a band, drag it, scroll
+  for Q (BW on a Band Shelf), double-click to remove; **right-click** for
+  Delete, Duplicate, **Create Harmonic Twin**, Unlink and the type;
+  **right-button drag** auditions the band while held. **+ Band**,
+  **Audition**, the spectrum fields and **Output Trim** sit above the
+  graph.
+- **Band list** below the graph, one row per band with every setting:
+  TYPE, EN (enable), SOLO, DYN (dynamics on/off), CH, FREQ, BW, GAIN, Q,
+  THRESH, RATIO, UP (up ratio), RANGE, ATTACK, RELEASE and delete. Values
+  can be typed, dragged or scrolled; fields that don't apply to a band's
+  type show "--", and the dynamics values are dimmed while DYN is off.
+  Solo works on one band at a time.
+- **Types**: Bell, Low Shelf, High Shelf and Band Shelf. The shelves have
+  a fixed slope, so Q only applies to a Bell; a Band Shelf uses BW.
+- **Harmonic linking**: linked bands move together in frequency, share
+  threshold, ratio and range, and are auditioned together.
+- **CH**: Both, Left only, Right only, **L→R** and **R→L** crossfeed, as
+  in the Parametric EQ.
+
+## How it works
+
+- `plugin/dsp/` holds the framework-independent core: matrices, the
+  stability guard, transfer functions, JSON serialization, the
+  coefficient mappers (RBJ cookbook biquads as state-space blocks),
+  `EqModel` (band list → state-space), `MbCompressorModel` (crossover bank
+  + per-band gain curves), and the gain-curve trainers.
+- The Dynamic EQs run their own engines (`DynamicEqEngine.hpp`,
+  `DynamicEqEngine2.hpp`): each band is a Regalia-Mitra construction
+  around a fixed all-pass, so the gain can change every sample without
+  moving any pole.
+- The mono EQ runs a separate single-channel engine and stability guard.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+[docs/EXTENDING.md](docs/EXTENDING.md).
 
 ## Building
 
-```sh
-./build_and_install.sh    # does everything below, plus installs into ~/.lv2/
-```
-
-or by hand:
+From the repository root, `./build_and_install.sh` builds all projects.
+To build only this one:
 
 ```sh
-git submodule update --init --recursive   # first time only (pulls DPF + its own pugl submodule)
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+./build_and_install.sh               # build and install the LV2 bundles into ~/.lv2/
+./build_and_install.sh --test        # also run the tests
+./build_and_install.sh --clean       # start from an empty build directory
+./build_and_install.sh --no-install  # build only
 ```
 
-Outputs land in `build/bin/`, for *each* of `matrix_filter`,
-`parametric_eq`, `parametric_eq_mono`, `multiband_compressor`,
-`dynamic_eq` and `dynamic_eq2`:
-- `<name>.lv2/` -- LV2 bundle (copy to `~/.lv2/`)
-- `<name>.vst3/` -- VST3 bundle (copy to `~/.vst3/`)
-- `<name>` -- standalone JACK app, useful for quick manual testing without
-  a full DAW
+The build produces, for `matrix_filter`, `parametric_eq`,
+`parametric_eq_mono`, `multiband_compressor`, `dynamic_eq` and
+`dynamic_eq2`, an LV2 bundle, a VST3 bundle and a standalone JACK
+program. On macOS use `./build_and_install_macos.sh` (run on a Mac; needs
+the Xcode Command Line Tools), which builds universal LV2/VST3/AU and
+installs them into `~/Library/Audio/Plug-Ins/`.
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md) for the full picture, including the
-real bug (a stability-guard issue that silently neutered a notch filter)
-that motivated building both of these:
-
 ```sh
-./build/bin/dsp_regression   # fast, pure-math checks
-./build/bin/audio_testbench  # real audio through the real engine (works from any directory)
-./build/bin/fit_gain_curve <base_preset.ssjson> <input.wav> <target_output.wav> <output_preset.ssjson>
-./build/bin/fit_multiband_compressor "<crossover_hz_csv>" <input.wav> <target_output.wav> <output_preset.ssjson>
+./build/bin/dsp_regression    # fast math checks (runs with --test)
+./build/bin/audio_testbench   # real audio through the real engine, all factory presets
+./build/bin/fit_gain_curve <base.ssjson> <input.wav> <target.wav> <out.ssjson>
+./build/bin/fit_multiband_compressor "<crossover_hz_csv>" <input.wav> <target.wav> <out.ssjson>
 ```
 
-All four are built automatically alongside the plugin and have no DPF/GUI
-dependency.
+See [docs/TESTING.md](docs/TESTING.md).
 
 ## Project layout
 
 ```
-plugin/               Matrix Filter's DPF plugin (DSP) side
-  dsp/                 framework-independent core, shared by ALL SIX plugins:
-                        matrices, stability guard, transfer function, JSON,
-                        coefficient mappers, nonlinear gain-curve trainer(s),
-                        EqModel (the EQ's band-list -> matrix assembler),
-                        MbCompressorModel (the multiband compressor's own,
-                        crossover-bank-based assembler), DynamicEqModel +
-                        DynamicEqEngine (the dynamic EQ's Regalia-Mitra
-                        band-list model and its own dedicated real-time
-                        engine -- not a mapper feeding StateSpaceEngine, see
-                        DynamicEqModel.hpp's file comment), and the Mono*
-                        trio (MonoStateSpaceTypes/Engine, MonoStabilityGuard)
-                        the mono EQ runs on
-  PluginStateSpace.*    DPF Plugin subclass (parameters, state, run())
-  DistrhoPluginInfo.h   plugin identity / build-time capability flags
-plugin_eq/             Parametric EQ's DPF plugin (DSP) side -- own identity,
-                        reuses plugin/dsp/ entirely, adds nothing of its own
-                        except PluginEq.* (parameters, state, run())
-plugin_eq_mono/        Parametric EQ Mono's DPF plugin (DSP) side -- same
-                        again, 1-in/1-out, running the mono engine
-plugin_mb_compressor/  Multiband Compressor's DPF plugin (DSP)
-                        side -- own identity, same shape as plugin_eq/,
-                        assembles via MbCompressorModel instead of EqModel
-plugin_dyn_eq/         Dynamic EQ's DPF plugin (DSP) side -- own
-                        identity, same shape again, drives DynamicEqEngine
-                        directly instead of StateSpaceEngine
-gui/                   Matrix Filter's DPF UI (GUI) side, NanoVG-drawn
-                        widgets, plus ParamStripWidget.* (ported from the
-                        sibling ../compressor project) shared with gui/mb/
-                        and gui/dyneq/
-gui/eq/                Shared EQ GUI: EqGraphWidget + BandListWidget (used
-                        unchanged by BOTH EQ plugins), plus UIEq.* (stereo)
-                        and UIEqMono.* (mono) hosting them
-gui/mb/                Multiband compressor GUI: MultibandGraphWidget +
-                        UIMbCompressor.*, MbEditorHost.hpp (the EqEditorHost
-                        analogue)
-gui/dyneq/             Dynamic EQ GUI: DynEqGraphWidget (EqGraphWidget's own
-                        node-drag interaction, plus a shaded dynamic-range
-                        region and a live moving combined curve) +
-                        UIDynEq.*, DynEqEditorHost.hpp
-build_and_install.sh   builds everything, installs the LV2 bundles to ~/.lv2/
-tests/                 dsp_regression.cpp -- fast pure-math correctness tests
-tools/testbench/       audio_testbench.cpp -- real audio through the real engine
-tools/trainer/         fit_gain_curve.cpp -- learns a gain curve from example audio
-                        fit_multiband_compressor.cpp -- same idea, N independent
-                        per-band curves behind a Linkwitz-Riley crossover
-docs/
-  ARCHITECTURE.md       how the stability guard, engine, nonlinear stage, EQ
-                        plugin and GUIs actually work
-  EXTENDING.md          how to build EQ/etc. on top (the EQ plugin is a real,
-                        worked example of this), and the state-dependent-
-                        coefficient mechanism dynamics uses
-  TESTING.md            the verification tools, and the bugs that motivated them
-presets/factory/       15 example .ssjson presets (built with the biquad mapper, plus one trained compressor)
-dpf/                   DISTRHO Plugin Framework (git submodule)
+plugin/dsp/             DSP core shared by all six plugins
+plugin/                 Matrix Filter plugin
+plugin_eq/              Parametric EQ plugin
+plugin_eq_mono/         Parametric EQ Mono plugin
+plugin_mb_compressor/   Multiband Compressor plugin
+plugin_dyn_eq/          Dynamic EQ plugin
+plugin_dyn_eq2/         Dynamic EQ 2 plugin
+gui/                    Matrix Filter editor and shared widgets
+gui/eq/, gui/mb/,       editors of the EQs, the Multiband Compressor and
+gui/dyneq/, gui/dyneq2/ the Dynamic EQs
+presets/factory/        factory presets
+tools/                  audio testbench and the gain-curve trainers
+tests/                  dsp_regression
+docs/                   ARCHITECTURE.md, EXTENDING.md, TESTING.md
+dpf/                    DISTRHO Plugin Framework (git submodule)
 ```
 
 ## License
@@ -744,7 +275,3 @@ Contributions are welcome under the [Contributor License Agreement](CLA.md)
 Third-party code: `dpf/` is the DISTRHO Plugin Framework, (C) Filipe Coelho
 and contributors, ISC license -- see `dpf/LICENSE`; the libraries bundled
 inside it keep their own licenses.
-
-Before any real distribution: `DISTRHO_PLUGIN_URI` in *each* plugin's
-`DistrhoPluginInfo.h` must be a URI you actually control (LV2 identity
-requirement), and the brand/unique IDs should be yours.

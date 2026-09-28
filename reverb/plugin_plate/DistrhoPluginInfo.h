@@ -31,12 +31,12 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/reverb_plate"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.reverb_plate"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A stereo plate reverb -- a Dattorro-style figure-8 coupled delay " \
-    "network, genuinely different from Reverb Dense's own Feedback " \
-    "Delay Network. Same room-dimension/Decay/Damping/Diffusion/" \
-    "Modulation/Spread/Balance controls and tempo-synced decay as " \
-    "Reverb Dense -- pick whichever character suits the material. See " \
-    "docs/REVERB_CONCEPT.md for the full design."
+    "A stereo plate reverb: a Dattorro-style figure-8 network of " \
+    "coupled delays and all-passes. Room dimensions, pre-delay, decay " \
+    "time (optionally synced to the host tempo), damping, diffusion, " \
+    "modulation, spread, balance and dry/wet, plus a parametric EQ with " \
+    "spectrum display on the reverb signal. Same controls as Reverb " \
+    "Dense -- pick whichever character suits the material."
 
 // 4-character code packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from every sibling MimoMusic plugin's own code (SSmm/SSeq/SSem/

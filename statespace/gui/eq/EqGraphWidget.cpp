@@ -1334,7 +1334,8 @@ bool EqGraphWidget::onScroll(const ScrollEvent& ev)
         const double dir = ev.delta.getY() > 0.0 ? 1.0 : (ev.delta.getY() < 0.0 ? -1.0 : 0.0);
         if (dir != 0.0)
         {
-            const double v = std::max(kXfeedGainMinDb, std::min(kXfeedGainMaxDb, current + dir * 0.5));
+            const double step = (ev.mod & kModifierAlt) ? 0.05 : 0.5; // Alt = 10x finer, as everywhere
+            const double v = std::max(kXfeedGainMinDb, std::min(kXfeedGainMaxDb, current + dir * step));
             (host_->*setter)(v);
             repaint();
         }

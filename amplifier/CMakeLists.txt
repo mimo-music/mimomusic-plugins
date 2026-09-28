@@ -17,13 +17,10 @@
 #                                 Invert R polarity switches, a Balance
 #                                 control, Bypass, Listen/Normalize
 #
-# Both plugins now have a small custom GUI (gui/UIAmplifier*.*, reusing
-# SimpleButton/ParamStripWidget ported verbatim from ../compressor) --
-# started with DISTRHO_PLUGIN_HAS_UI 0 (no GUI at all, per the original
-# "no special gui is needed" ask), revised to 1 once the Listen/Normalize
-# feature needed a live level readout and start/stop control no host's
-# own generic parameter editor could give it. See either plugin's own
-# DistrhoPluginInfo.h for the fuller story.
+# Both plugins have a small custom GUI (gui/UIAmplifier*.*, reusing
+# SimpleButton/ParamStripWidget from ../compressor): Listen/Normalize needs
+# a live level readout and a start/stop control no host's generic
+# parameter editor can give it.
 #
 # Also builds one dependency-free command-line tool:
 #   - dsp_regression: fast, pure-math correctness checks (no audio files,

@@ -100,7 +100,7 @@ int createHarmonicTwin(DynamicEqModel2& model, int sourceIndex, double factor, d
         source.harmonicRatio = 1.0;
     }
 
-    DynamicEqBand2 twin = source; // copies every field -- "another filter same to the selected"
+    DynamicEqBand2 twin = source; // copies every field
     twin.freqHz = clampedFreq(source.freqHz * factor, sampleRate);
     twin.harmonicGroup = source.harmonicGroup;
     twin.harmonicRatio = source.harmonicRatio * factor;

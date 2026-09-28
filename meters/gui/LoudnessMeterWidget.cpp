@@ -595,8 +595,7 @@ void LoudnessMeterWidget::drawHistoryGraph(float x, float y, float w, float h)
 
     // Short-term drawn first (background), Momentary second (foreground)
     // -- its own fill alpha is deliberately lower than Short-term's own
-    // so the background curve/fill stays visible underneath it, per
-    // "at least the one in the foreground need to [be transparent]".
+    // so the background curve/fill stays visible underneath it.
     scissor(x, y, w, h);
     strokeSpline(historyDrawXs_.data(), historyDrawYsShortTerm_.data(), n, Color(90, 170, 230), true, baselineY, 0.22f);
     strokeSpline(historyDrawXs_.data(), historyDrawYsMomentary_.data(), n, Color(140, 210, 150), true, baselineY, 0.16f);
@@ -905,8 +904,7 @@ bool LoudnessMeterWidget::onMouse(const MouseEvent& ev)
     return showDistribution_ ? onMouseDistribution(ev) : onMouseHistory(ev);
 }
 
-// X-axis zoom for the Distribution view, centered on the cursor -- direct
-// ask: "would be cool to have a x-axis zoom centred on the mouse." No-op
+// X-axis zoom for the Distribution view, centered on the cursor. No-op
 // (returns false, letting the event fall through) whenever the cursor is
 // outside the center panel.
 bool LoudnessMeterWidget::onScrollDistribution(const ScrollEvent& ev)

@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 #
 # macOS counterpart to build_and_install.sh -- run this ON a Mac. Same
-# aggregator idea: runs every sibling project's own
-# ./build_and_install_macos.sh in turn (amplifier, statespace, compressor,
-# meters) instead of `cd`-ing into each one by hand, then reports one
-# combined summary. reverb has no build_and_install_macos.sh yet -- its
-# own Linux build is verified and working, it just hasn't had a
-# macOS-specific packaging script written yet. It is
-# skipped with a note, not treated as a failure.
+# aggregator idea: runs every project's own ./build_and_install_macos.sh in
+# turn (amplifier, statespace, compressor, meters, reverb) instead of
+# `cd`-ing into each one by hand, then reports one combined summary --
+# the same set of plugins as on Linux.
 #
 # Usage:
 #   ./build_and_install_macos.sh
@@ -38,7 +35,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECTS=(amplifier statespace compressor meters)
+PROJECTS=(amplifier statespace compressor meters reverb)
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
     sed -n '2,/^[^#]/p' "${BASH_SOURCE[0]}" | grep '^#' | sed -e 's|^# ||' -e 's|^#$||'
@@ -46,7 +43,7 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
 fi
 
 echo "== mimomusic: build all plugin projects (macOS) =="
-echo "Projects: ${PROJECTS[*]} (reverb has no macOS script yet -- skipped)"
+echo "Projects: ${PROJECTS[*]}"
 echo "Builds land in: $SCRIPT_DIR/builds/<project>/"
 echo
 
@@ -78,19 +75,17 @@ for proj in "${PROJECTS[@]}"; do
     echo
 done
 
-if [ -x "$SCRIPT_DIR/reverb/build_and_install.sh" ] && [ ! -f "$SCRIPT_DIR/reverb/build_and_install_macos.sh" ]; then
-    SKIPPED+=("reverb (no build_and_install_macos.sh yet)")
-fi
-
 echo "============================================================"
 echo "Summary:"
-for proj in "${OK[@]}"; do
+# ${arr[@]+"${arr[@]}"}: macOS's bash 3.2 treats an empty "${arr[@]}" as
+# an unbound variable under set -u.
+for proj in ${OK[@]+"${OK[@]}"}; do
     echo "  OK       $proj"
 done
-for proj in "${FAILED[@]}"; do
+for proj in ${FAILED[@]+"${FAILED[@]}"}; do
     echo "  FAILED   $proj"
 done
-for proj in "${SKIPPED[@]}"; do
+for proj in ${SKIPPED[@]+"${SKIPPED[@]}"}; do
     echo "  SKIPPED  $proj"
 done
 echo "============================================================"

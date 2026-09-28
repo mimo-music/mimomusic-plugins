@@ -120,8 +120,7 @@ private:
     // column marker.
     void refreshMakeupMarkers();
 
-    // "a button for sidechain options that opens another window" (direct
-    // ask) -- ORIGINALLY built as a genuine second native OS window
+    // The sidechain options panel -- ORIGINALLY built as a genuine second native OS window
     // (DGL_NAMESPACE::NanoStandaloneWindow, transient-parented to this
     // one). That crashed the host outright: DPF's own LV2-UI bridge
     // hands off each new UI's construction parameters through a single
@@ -224,9 +223,8 @@ private:
     // set up the compressor" -- see kParamListenMode's own comment in
     // PluginCompressorStereo.hpp. Cycles Off/Mid/Side; greyed out
     // (setEnabled(false)) whenever stereoMode_ isn't MidSide, since the
-    // Parameter itself is inert outside that mode too. "The listening
-    // function can be a toggled one, no need to have it double" (direct
-    // ask) -- stays this single shared button even in the new dual
+    // Parameter itself is inert outside that mode too. A single toggled
+    // Listen is enough -- it stays this single shared button even in the new dual
     // layout, unlike Ratio Direction (a genuinely per-bank *value*)
     // Listen is a single momentary audition override, not part of either
     // bank's own sound.

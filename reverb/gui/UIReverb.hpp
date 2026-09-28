@@ -31,13 +31,11 @@ START_NAMESPACE_DISTRHO
 // project nor this environment can currently reproduce/verify; see
 // docs/REVERB_CONCEPT.md's GUI section for that tradeoff spelled out).
 //
-// Deliberately not included in this first pass (see docs/REVERB_CONCEPT.md's
-// "Phased build plan"): A/B compare, Load/Save/Export file browser, the
-// EQ's momentary right-click audition-hold (stubbed as a no-op, exactly
-// like the sibling EQ Mono plugin already does when there's no audition
-// DSP behind it), per-field tooltips (TooltipOverlay is ported and ready,
-// just not wired to every field yet), and any room-shape visualization
-// beyond plain numeric fields.
+// Not included (see docs/REVERB_CONCEPT.md's "Known limitations"): A/B
+// compare, Load/Save/Export, the EQ's right-click audition-hold (a no-op
+// here, since there is no audition DSP), per-field tooltips
+// (TooltipOverlay is ported but not wired to every field), and room-shape
+// visualization.
 class UIReverb : public UI, public ssgui::IEqEditorHost
 {
 public:

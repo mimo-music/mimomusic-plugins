@@ -4,9 +4,9 @@
 // GainCurveTrainer.hpp
 //
 // Fits a NonlinearSchedule (envelope attack/release + gain curve, see
-// StateSpaceTypes.hpp) to example (input, target-output) audio -- i.e.
-// "give an input and a desired output, and the coefficients are learned",
-// for the state-dependent gain stage StateSpaceEngine applies on top of a
+// StateSpaceTypes.hpp) to example (input, target-output) audio -- the
+// coefficients are learned from an input and a desired output -- for the
+// state-dependent gain stage StateSpaceEngine applies on top of a
 // fixed, stability-guarded A/B/C/D.
 //
 // Why this is a well-posed, cheap fitting problem rather than a general

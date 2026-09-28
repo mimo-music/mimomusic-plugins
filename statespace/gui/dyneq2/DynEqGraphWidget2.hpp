@@ -5,13 +5,11 @@
 //
 // The main interactive surface of the dynamic EQ plugin -- EqGraphWidget's
 // own frequency (x, log 20Hz-20kHz) vs. gain (y, adjustable +-range) graph
-// and node-drag interaction, reused almost verbatim (there is no band
-// *type* to right-click here -- every band is the same Regalia-Mitra bell
-// shape, see DynamicEqModel2.hpp's file comment -- so that part of
-// EqGraphWidget's interaction is simply absent, the same simplification
-// MultibandGraphWidget already made for its own, differently-shaped,
-// bands), PLUS the two things that make this a *dynamic* EQ graph rather
-// than a static one, both drawn from ssgui::IDynEqEditorHost2:
+// and node interaction, reused almost verbatim -- click to add a band,
+// drag, double-click to remove, right-click for the context menu (delete,
+// duplicate, harmonic twin, unlink, type), right-button drag to audition --
+// PLUS the two things that make this a *dynamic* EQ graph rather than a
+// static one, both drawn from ssgui::IDynEqEditorHost2:
 //
 //   - a shaded "dynamic range" region per band with dynamics enabled --
 //     the area between that band's response curve at its resting gainDb
@@ -147,6 +145,16 @@ private:
     int hoverBand_ = -1;
     int dragBand_ = -1;
     int dragEdge_ = 0; // 0 = dragging the node itself, 1/2 = a Band Shelf corner handle, see edgeHandleAt()
+
+    // Right button, as in EqGraphWidget: a plain click (never crosses the
+    // dead zone) opens the context menu on release; a drag moves the band
+    // and auditions it while held (host_->beginBandAudition()/
+    // endBandAudition()), drawn with a gold ring.
+    int auditionHoldBand_ = -1;
+    bool rightPressPending_ = false;
+    int rightPressBand_ = -1;
+    double rightPressX_ = 0.0, rightPressY_ = 0.0;
+    static constexpr double kRightDragDeadZonePx = 3.0;
 
     int lastClickBand_ = -1;
     std::chrono::steady_clock::time_point lastClickTime_{};

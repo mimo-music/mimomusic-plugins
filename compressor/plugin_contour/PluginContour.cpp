@@ -993,7 +993,7 @@ void PluginContour::run(const float** inputs, float** outputs, uint32_t frames)
         for (uint32_t i = 0; i < frames; ++i)
         {
             const double l = double(inL[i]), r = double(inR[i]);
-            // "the two bars on the left should also show m/s" -- same
+            // The input meters show M/S in Mid/Side mode -- same
             // Mid/Side re-derivation the main (non-bypass) path below
             // uses, ported from PluginCompressorStereo::run()'s identical
             // bypass-branch fix.

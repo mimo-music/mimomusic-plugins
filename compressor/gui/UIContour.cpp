@@ -433,8 +433,7 @@ UIContour::UIContour()
         refreshGraphCurves();
     });
 
-    // "a button for sidechain options that opens another window" (direct
-    // ask, ported verbatim) -- see UICompressorStereo::
+    // The trigger options button (ported verbatim) -- see UICompressorStereo::
     // refreshScPanelVisibility()'s own comment for the full in-window-
     // overlay design.
     btnSidechainOptions_ = new SimpleButton(this, "Trigger Input...");
@@ -767,9 +766,7 @@ void UIContour::layout()
     strip_->setSize(uint(w - 2.0f * pad), uint(stripH));
 
     // Dual-Mono/Mid-Side widget set. Each column's own Condition/Reset
-    // pair sits above its own (correspondingly shorter) graph -- "make
-    // the middle plot with the graph a little smaller maybe" (direct
-    // ask).
+    // pair sits above its own (correspondingly shorter) graph.
     constexpr float dualColGap = 8.0f;
     constexpr float curveBtnRowH = 24.0f;
     constexpr float curveBtnGap = 4.0f;
@@ -1211,9 +1208,8 @@ void UIContour::syncBFromA()
     setParameterValue(kParamInputGainB, paramCache_[kParamInputGainB]);
     setParameterValue(kParamWetDryB, paramCache_[kParamWetDryB]);
     // The curve (including every point's own handle/direction tag) and
-    // condition too -- "the difference to contour is that we can draw
-    // the curve freely. thats all" applies to B's own curve here just
-    // like every scalar field above.
+    // condition too -- B's own curve is copied just like every scalar
+    // field above.
     curveB_ = curve_;
     conditionB_ = condition_;
     actionB_ = action_;
@@ -1433,7 +1429,7 @@ void UIContour::parameterChanged(uint32_t index, float value)
     {
         // A host may hand our OWN just-written mirror values back a moment later (queued, so older than what the
         // graph shows by now). Rebuilding the curve from those mid-edit pulled a node being dragged back to a
-        // stale position -- "they don't react on drag". Real restores (session/preset load) arrive long after any
+        // stale position. Real restores (session/preset load) arrive long after any
         // local edit, so echoes within a short window of one are simply ignored.
         if (hasLocalMirrorEdit_ && std::chrono::steady_clock::now() - lastLocalMirrorEdit_ < std::chrono::milliseconds(1500))
             break;
@@ -1634,8 +1630,7 @@ bool UIContour::onKeyboard(const KeyboardEvent& ev)
         if (closed) return true;
     }
 
-    // Delete/Backspace with no field mid-edit removes every selected node
-    // ("when selected and delete is pressed they should be deleted all").
+    // Delete/Backspace with no field mid-edit removes every selected node.
     // Only the graph(s) currently on screen -- a hidden one can hold a stale
     // selection from another stereo layout.
     if (editing == nullptr && ev.press && (ev.key == DGL_NAMESPACE::kKeyDelete || ev.key == DGL_NAMESPACE::kKeyBackspace))
@@ -1972,7 +1967,7 @@ void UIContour::uiIdle()
         };
         if (changedA) { push(0, kParamMeterTrailBankA, trigFracA_, graph_, graphA_); for (uint32_t k = 0; k < kTrailBankSize; ++k) lastTrailBankA_[k] = paramCache_[kParamMeterTrailBankA + k]; }
         // graphB_ (the right/Side plot of Dual-Mono / Mid-Side) draws ITS channel as its own primary voice (slot 0), exactly like graphA_
-        // does for A -- pushing B's bank into slot 1 filled a slot that widget never draws ("the dots are not like in the first channel").
+        // does for A -- pushing B's bank into slot 1 would fill a slot that widget never draws.
         if (changedB) { push(0, kParamMeterTrailBankB, trigFracB_, graphB_, nullptr); for (uint32_t k = 0; k < kTrailBankSize; ++k) lastTrailBankB_[k] = paramCache_[kParamMeterTrailBankB + k]; }
     }
     // Trigger activity -> the threshold's colour, smoothed with the Attack (rising) and Release

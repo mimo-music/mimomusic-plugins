@@ -20,11 +20,12 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/compressor-stereo"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.compressor-stereo"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A 2-in/2-out feed-forward dynamics compressor (plus a stereo external " \
-    "sidechain key input) with a Linked / Dual-Mono / Mid-Side stereo mode, " \
-    "input/output gain, threshold, ratio, attack, release, soft knee, and " \
-    "an optional measured volume-compensation stage that keeps perceived " \
-    "loudness constant while you shape the compression."
+    "A stereo feed-forward compressor with an external sidechain input " \
+    "and Linked, Dual-Mono or Mid-Side processing: input gain, " \
+    "threshold, ratio (compressing above or below the threshold), " \
+    "attack, release, soft knee, makeup gain and wet/dry per channel, " \
+    "plus a sidechain panel with gain, a band filter and a scope that " \
+    "works on the external or the internal signal."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 #define DISTRHO_PLUGIN_BRAND_ID Mimo

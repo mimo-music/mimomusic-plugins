@@ -106,8 +106,7 @@ public:
     // bank's shape on screen at a time.
     void setFilterRange(bool enabled, float highpassHz, float lowpassHz);
 
-    // "when editing right you can change the fft plot to red also" (direct
-    // ask) -- tints the passband highlight and the draggable handles red
+    // Tints the passband highlight and the draggable handles red
     // while the corners currently shown/dragged are R's own (editingScBankR_
     // == 1 on the owning UI), matching the red used for R's own level
     // trace below, instead of always using the same neutral color

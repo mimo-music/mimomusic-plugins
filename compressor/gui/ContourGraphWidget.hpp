@@ -184,7 +184,7 @@ public:
     // row / new node (-1 after a window or Shift-click, i.e. an explicit
     // multi-selection). deleteSelected() uses it the way the right-click menu
     // does: if the selection is just that node's own link group, only that
-    // node goes -- "delete key should only delete the selected nodes".
+    // node goes.
     int primarySelected() const { return primary_; }
     // Closes the right-click menu if it's open (the owning UI calls this on
     // Escape). Returns true if there was one to close.
@@ -502,13 +502,13 @@ private:
     // points still has real empty room to land in, rather than always
     // falling inside one point's own grab circle -- see hitPoint()'s
     // nearest-match fix (this file's .cpp) for the other half of the same
-    // "points close together felt unreliable to edit" report.
+    // problem (points close together were unreliable to edit).
     static constexpr float kHandleHitRadiusPx = 7.0f;
     // Within this many pixels of a node's centre a press is always the NODE's (see tryGrabHandle()).
     static constexpr float kNodeCoreRadiusPx = 8.0f;
     // Grab radii. The Edit tool never creates nodes, so it can afford big,
-    // forgiving targets ("the nodes most right is also hard to move with mouse",
-    // "the support points still difficult"); the Draw tools keep small ones so a
+    // forgiving targets (nodes at the right edge and support points are
+    // otherwise hard to grab); the Draw tools keep small ones so a
     // node can still be placed right next to another.
     float nodeHitRadius() const { return isDrawTool() ? kHandleHitRadiusPx : 11.0f; }
     float dotHitRadius() const { return isDrawTool() ? 8.0f : 12.0f; }

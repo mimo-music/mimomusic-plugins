@@ -69,8 +69,8 @@ UIAmplifierStereo::UIAmplifierStereo()
     strip_ = new ParamStripWidget(this);
     strip_->setFields({
         { "Balance", "", -1.0f, 1.0f, 0.0f, 0.05f, false, 2, kParamBalance },
-        { "Normalize To", "dB", -24.0f, 0.0f, -1.0f, 0.5f, false, 1, kParamNormalizeTarget },
-        { "Gain", "dB", -60.0f, 24.0f, 0.0f, 0.5f, false, 1, kParamGain },
+        { "Normalize To", "dB", -24.0f, 0.0f, -1.0f, 0.5f, false, 2, kParamNormalizeTarget },
+        { "Gain", "dB", -60.0f, 24.0f, 0.0f, 0.5f, false, 2, kParamGain },
     });
     strip_->setGetter([this](uint32_t idx) { return paramCache_[idx]; });
     strip_->setSetter([this](uint32_t idx, float v) {

@@ -53,7 +53,7 @@ namespace ssfilter {
 // keeping the coefficient set (128*128 + 128*2*2 + 2*2 doubles ~= 131 KiB)
 // small enough to copy/double-buffer without concern. Raised from an
 // original 64 specifically to give the sibling EQ plugin
-// (plugin/dsp/EqModel.hpp, docs/ARCHITECTURE.md's "EqModel / EQ plugin"
+// (plugin/dsp/EqModel.hpp, ../statespace/docs/ARCHITECTURE.md's "EqModel"
 // section) headroom for up to 32 cascaded bands (4 states/band: two
 // independent biquads, one per stereo channel) -- comfortably past
 // FabFilter Pro-Q's advertised 24-band maximum -- without this shared
@@ -131,7 +131,7 @@ struct GainCurve
     // (see plugin/dsp/MbCompressorModel.hpp) don't need their own copy of
     // it, rather than duplicating the same seven lines a third time.
     //
-    // `ratioUp` generalizes this to "up and down compressing" in one call:
+    // `ratioUp` generalizes this to downward and upward compression in one call:
     // it shapes the mirrored line *below* the threshold the same way
     // ratioDown shapes the one above it -- makeupDb + (levelDb-thresholdDb)
     // * (1/ratioUp - 1), which is a *positive* (boosting) contribution for
@@ -157,7 +157,7 @@ struct GainCurve
 // level and looks up a gain (dB) from `curve` at that level, every sample
 // -- i.e. C(p)=gain*C0, D(p)=gain*D0, with A/B (and hence the recursion's
 // stability) completely unaffected. See StateSpaceEngine::processBlock()
-// and docs/EXTENDING.md for the full picture, and GainCurveTrainer.hpp for
+// and ../statespace/docs/EXTENDING.md for the full picture, and GainCurveTrainer.hpp for
 // fitting `curve` (and attackMs/releaseMs) to example input/target-output
 // audio instead of hand-setting it.
 struct NonlinearSchedule
@@ -228,7 +228,7 @@ struct BandSplit
 // single global stage -- if also enabled -- then applies on top of that
 // sum, e.g. as a broadband safety limiter over an otherwise per-band
 // compressor); they're independent fields for exactly that reason. See
-// docs/EXTENDING.md's "Multiband compression" section and
+// ../statespace/docs/EXTENDING.md's "Multiband compression" section and
 // StateSpaceEngine.hpp's processBlock() for the per-sample mechanics, and
 // mappers::makeStereoCrossoverBank() (CoefficientMapper.hpp) for how a
 // crossover bank populates the state ranges/feedD this depends on. `A` and

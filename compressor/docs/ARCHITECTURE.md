@@ -1,180 +1,184 @@
 # Architecture
 
-This document describes the *current* system.
-
-## DSP core (`plugin/dsp/CompressorDsp.hpp`)
-
-Entirely header-only -- no `.cpp` files to keep in sync between the DSP and
-UI sides, unlike `../statespace`'s stability guard/
-transfer-function math, because everything here is small enough that
-splitting declaration from definition would add bookkeeping without a
-real benefit.
+## Overview
 
 ```
-input --[x inputGain]--> xg --[abs]--> envelope follower --[dB]--> gain computer --[dB->linear]--> gr
-                            |                                                                        |
-                            +-------------------------------- xg * gr --------------------------------+ = y (post-compression)
-y --[x compensationGain, if enabled]--[x outputGain]--> output
+plugin/dsp/CompressorDsp.hpp       shared DSP core (header-only)
+plugin/dsp/TruePeakLimiterDsp.hpp  the Limiter's True Peak gain computer
+plugin/dsp/CurveDsp.hpp            Contour's curve and voice
+plugin/dsp/SpectrumAnalyzer.*      FFT analyser for the sidechain/trigger scopes
+plugin_mono/, plugin_stereo/,      DPF Plugin subclasses (parameters, state, run())
+plugin_limiter/, plugin_contour/
+plugin_contour_mono/               only DistrhoPluginInfo.h (CONTOUR_MONO)
+gui/                               DPF UIs and NanoVG widgets
 ```
 
-- **`computeGainReductionDb(levelDb, thresholdDb, ratio, kneeDb)`**: pure
-  function, the soft-knee static curve (Giannoulis/Massberg/Reiss). Used
-  both by the real-time engine (per sample) and directly by
-  `CompressorGraphWidget` to draw the static transfer curve -- the same
-  math, not a GUI approximation of it.
-- **`EnvelopeFollower`**: linear-domain one-pole, asymmetric attack/release
-  coefficients (`exp(-1/(sr*t))`). Deliberately smooths in linear
-  amplitude, converting to dB only once at the point the curve is
-  evaluated -- which avoids by construction a frequency-dependence bug
-  (a dB-domain envelope touches -infinity at every zero crossing).
-- **`LoudnessMeter`**: fixed ~300ms one-pole mean-square estimate,
-  independent of the compressor's own attack/release. Drives both the
-  bargraph's RMS fill and the volume-compensation comparison.
-- **`PeakMeter`**: instant peak with a ~20dB/s conventional decay, drives
-  the bargraph's peak-hold line and (via a >=0dBFS check) the clip LED.
-- **`CompensationGain`**: measures once from real audio, then holds --
-  not a perpetual auto-leveler. `beginMeasurement()` starts a cycle: a
-  short (100ms) warm-up is skipped (so the compressor's own attack
-  transient doesn't bias the result), then ~0.6s of *actual sound*
-  (silence doesn't advance the countdown) is averaged into a fixed dB
-  value, which `update()` then returns unchanged (`State::Held`)
-  regardless of what plays afterwards -- until something calls
-  `beginMeasurement()` again. The two plugins do that automatically
-  whenever a compression-shape parameter (Threshold/Ratio/Attack/Release/
-  Knee) changes while enabled, or on request via the "Measure" button's
-  trigger Parameter. `state()` (Idle/Measuring/Held) and `value()` both
-  feed output Parameters so the UI can show exactly what's happening. (A
-  real measurement bias was found and fixed by adding the warm-up skip.)
-  Note: Volume Compensation has since been removed from all three plugins
-  (its Parameters remain only as unused placeholders); this class is
-  what's left of it.
-- **`CompressorVoice`**: bundles one `EnvelopeFollower` + the gain-computer
-  call into "feed a detector sample, get back a linear gain multiplier" --
-  the actual per-detector unit both plugins use.
-- **`StereoMode`**: `Linked` / `DualMono` / `MidSide` -- see the Stereo
-  plugin's own `run()` for exactly how each wires two `CompressorVoice`s
-  to the L/R (or Mid/Side) signal path.
+The DSP files have no DPF/DGL dependency, so the tests and the audio
+testbench build against them directly.
 
-## Plugin sides (`plugin_mono/`, `plugin_stereo/`)
+## DSP core (`CompressorDsp.hpp`)
 
-Ordinary DPF `Plugin` subclasses: a fixed bank of automatable `Parameter`s
-for the seven knobs + Bypass + Compensation, and a second bank of *output*
-Parameters for the meters (level/peak per channel, detector level, gain
-reduction, compensation gain) -- read once per `run()` call by the UI side
-via `parameterChanged()`, the same cross-process-safe mechanism the
-sibling project's spectrum-analyzer output bands use. The Stereo plugin
-additionally has one `State` (`stereoMode`) for the Linked/Dual-Mono/
-Mid-Side choice -- a discrete topology pick, not something meaningful to
-automate continuously, matching that project's own `spectrumMode`
-convention.
+```
+input -> x inputGain -> xg ---------------------------------------------+
+                                                                         |
+trigger (xg, or the sidechain input) -> x sidechainGain -> [band filter] |
+   -> |.| -> EnvelopeFollower -> dB -> gain computer -> dB->linear = gr  |
+                                                                         v
+                                        y = xg * gr * makeup, then wet/dry, output gain
+```
 
-`run()`'s per-sample body (Stereo, abbreviated -- Mono is the same minus
-the per-mode switch):
+- **`computeGainReductionDb(levelDb, thresholdDb, ratioDown, ratioUp,
+  kneeDb)`** -- the static soft-knee curve (Giannoulis/Massberg/Reiss).
+  `ratioDown` acts above the threshold, `ratioUp` below it (upward
+  compression); the plugins set one of them to 1 depending on Ratio
+  Down/Up. The graph widget draws the curve with this same function.
+- **`EnvelopeFollower`** -- linear-domain one-pole with separate attack
+  and release coefficients (`exp(-1/(sr*t))`, 0 ms = instant). Smoothing
+  happens in linear amplitude and is converted to dB only where the curve
+  is evaluated; a dB-domain envelope would hit -infinity at every zero
+  crossing.
+- **`CompressorVoice`** -- one `EnvelopeFollower` plus the gain computer:
+  feed a rectified detector sample, get a linear gain.
+- **`SidechainBandFilter`** -- high-pass and low-pass corner in series for
+  the trigger signal; skipped entirely while the filter is off.
+- **`softLimitListen()`** -- soft limiter for Sidechain/Trigger Listen,
+  since up to +60 dB of trigger gain can make that signal very loud.
+- **`LoudnessMeter`** (about 300 ms mean square) and **`PeakMeter`**
+  (instant peak, about 20 dB/s decay) for the bargraphs and clip LEDs.
+- **`StereoMode`** -- `Linked`, `DualMono`, `MidSide`.
 
-1. Apply input gain.
-2. Detect (per the active `StereoMode`) and compute gain reduction via the
-   relevant `CompressorVoice`(s).
-3. Apply the resulting gain to the signal.
-4. Feed pre/post `LoudnessMeter`s (a mono-downmixed bus level, so the
-   comparison means the same thing regardless of stereo mode) and call
-   `CompensationGain::update()` -- **but its return value is not applied
-   to the signal here**. It only measures/reports (via output Parameters)
-   -- see "Where Volume Compensation actually applies" below for why.
-5. Apply output gain.
-6. Feed `PeakMeter`s for the bargraph (raw input pre-anything; final
-   output post-everything).
+## Compressor Mono / Stereo (`plugin_mono/`, `plugin_stereo/`)
 
-### Where Volume Compensation actually applies
+Per sample (Stereo):
 
-Not in `run()` at all -- an earlier draft did exactly that (a per-sample
-`y *= dbToLinear(compDb)`, gated on `compensationEnabled_`), and it
-worked, but it meant the compensation amount was an invisible multiplier
-stacked *behind* Output Gain, with no way to see or adjust the number
-directly, and no way to nudge it without either fighting the auto value
-or turning the whole feature off. Moved to the UI side instead:
-`UICompressorMono`/`Stereo::parameterChanged()` watches
-`kParamMeterCompState` for the `Measuring -> Held` edge and, exactly
-once per edge, calls `applyCompensationToOutputGain()`, which writes the
-held value straight into the real `kParamOutputGain` Parameter (via
-`setParameterValue()`, the same call a manual fader drag makes). From
-that instant, Output Gain is the *only* gain-shaping value in the whole
-signal path past the compressor -- one visible, freely user-editable
-number that can then be adjusted slightly by hand.
+1. Gain staging for the stereo mode: Input Gain (and in Dual Mono /
+   Mid/Side the Global Input Gain before the split; in Mid/Side the
+   per-bank Input Gain applies after the M/S decode).
+2. The trigger signal: the external sidechain input with Sidechain on,
+   otherwise the gain-staged main signal. Sidechain Gain, then the
+   optional band filter.
+3. Detection per mode: `max(|L|,|R|)` into one voice (Linked), one voice
+   per channel (Dual Mono), Mid and Side of the filtered trigger into one
+   voice each (Mid/Side).
+4. Apply gain, makeup and wet/dry per bank; Mid/Side re-encodes.
+5. Overrides: M/S Listen (Mid or Side alone), Sidechain Listen (the
+   filtered trigger, soft-limited).
+6. Output Gain, then the output meters (M/S in Mid/Side mode).
 
-Two details make repeated re-measurement and disabling behave correctly
-rather than compounding or losing a manual tweak:
-- `lastAutoAppliedCompDb_` tracks how much of the *current* Output Gain
-  value this feature itself contributed last time. A fresh measurement
-  computes `manualBaseline = currentOutputGain - lastAutoAppliedCompDb_`
-  (undoing its own old contribution) before adding the new one --
-  preserving whatever the user tweaked on top of (or instead of) the
-  previous auto-applied value, rather than stacking indefinitely across
-  repeated Threshold/Ratio/etc. changes.
-- Disabling Compensation calls the mirror-image
-  `removeCompensationFromOutputGain()`, subtracting out exactly its own
-  last contribution and leaving any further manual adjustment alone.
+Bank B (Threshold B, Ratio B, ...) is only used while the two channels are
+independent (Dual Mono with Link off, or Mid/Side); otherwise it mirrors
+bank A. Parameters whose control is hidden in the current mode are also
+inactive in the DSP, so stray automation can't change the sound through a
+control that isn't shown.
 
-Because `run()` itself never multiplies the signal by anything
-compensation-related, a manual Output Gain edit -- at any time, mid-
-measurement or long after Held -- is now literally impossible for
-Compensation to "fight": there is nothing left in the DSP that would.
+Meters, gain reduction and the scope data are output Parameters read by
+the UI. The two spectrum analysers only run while the editor's scope
+panel is open: the UI increments `kParamUiHeartbeat` every idle tick, and
+`run()` feeds the analysers only if it changed within the last ~2 s (a
+counter, not a toggle, because the LV2 wrapper only delivers changed
+values).
 
-Bypass shortcuts this entirely (a plain copy) but still feeds the meters
-with the pass-through signal, so the bargraphs never freeze on a stale
-reading while bypassed.
+Discrete choices that are not meant to be automated -- stereo mode, Ratio
+Down/Up, Link -- are `State`s. Parameters are only ever appended, never
+reordered, so saved sessions and automation keep their meaning; unused
+entries stay as placeholders marked "(unused)".
+
+Bypass copies input to output but keeps feeding the meters and the scope.
+
+## Limiter (`plugin_limiter/`)
+
+- A lookahead delay line holds the audio back by Lookahead; the gain is
+  computed from the undelayed signal. The delay is reported to the host as
+  latency.
+- **Classic**: a `CompressorVoice` with a fixed 20:1 ratio, stereo-linked.
+- **True Peak** (`TruePeakGainComputer`): for each incoming sample the gain
+  it alone would need (threshold / level, at most 1); the gain applied to
+  the delayed sample is the minimum of those values over the whole
+  lookahead window (a monotonic-deque sliding minimum, O(1) amortized, no
+  allocation). A drop is applied immediately, recovery is smoothed with
+  Release, so the output provably never exceeds the threshold. Attack and
+  Knee don't apply here.
+- **Ceiling**: a final hard clamp on the output sample.
+- **Boost**: adds `-threshold` to the output gain, on top of Output Gain.
+- Switching the algorithm resets both gain computers.
+
+## Contour (`plugin_contour/`, `CurveDsp.hpp`)
+
+### `TransferCurve`
+
+A fixed-size, allocation-free list of (input dB, output dB) points from
+-80 to +6 dB: two end points with fixed X, up to 16 interior points. Each
+point carries:
+
+- an optional tangent handle -- zero means a corner (straight segments),
+  non-zero makes the adjacent segments cubic Beziers (not clamped against
+  overshoot);
+- a direction tag (both / rising only / falling only) -- the rising and
+  falling curves are separate views of the point list, so the level can
+  take different paths up and down;
+- a link group and axis (X+Y, X only, Y only) and an optional snap to the
+  diagonal -- editing aids evaluated in the UI, not in the DSP.
+
+Two points may share one X (a vertical step, e.g. for a gate); the later
+point governs at and above that X. `curveToString()` / `curveFromString()`
+serialize the curve as a short text string, used both as the DPF State
+and in `.mccp` presets.
+
+### `CurveVoice`
+
+Two signals go in: the trigger (after Trigger Gain and filter) and the
+audio's own level.
+
+1. **Trigger**: a fast peak detector (instant attack, release = Release
+   capped at 8 ms) compared with the threshold (Above or Below) -- *met* or
+   not. With lookahead, the end of a trigger is held for the lookahead
+   time so the delayed audio it belongs to is fully covered.
+2. **Switch**: a value from 0 (diagonal) to 1 (curve). Its target follows
+   *met* and the On Trigger setting (Curve or Diagonal); it moves with
+   Attack when the trigger starts and Release when it ends.
+3. **Curve gain**: the audio's level (peak follower, instant attack,
+   Release to fall) is looked up on the curve -- on the rising or falling
+   view depending on the level's direction. Deeper cuts are applied at
+   once, shallower ones relax with Release, so a low tone's ripple doesn't
+   modulate the gain.
+4. Output gain = switch x curve gain (in dB).
+
+The trigger decides only *when* the curve applies, never *where* on the
+curve the audio sits.
+
+### Plugin
+
+As Compressor Stereo (stereo modes, bank B, wet/dry, heartbeat), plus a
+lookahead ring buffer for the audio and a bank of (level, gain) pairs per
+block for the graph's trail of dots.
+
+**Contour Mono** is built from the same sources: its
+`DistrhoPluginInfo.h` defines `CONTOUR_MONO`, and the few mono-specific
+places check `kContourMono`. Its CMake target includes
+`plugin_contour_mono/` instead of `plugin_contour/`, which is what selects
+the mono info header.
 
 ## GUI (`gui/`)
 
-- **`SimpleButton`**: copied verbatim from the sibling project.
-- **`ParamStripWidget`**: a caller-supplied list of `ParamFieldSpec`
-  (label/unit/range/default/nudge-step/decimals/paramIndex) drawn as one
-  row of click-to-edit fields, generalizing that project's
-  `NonlinearPanelWidget` field-row interaction into one reusable class.
-  Also supports click-and-drag: press and drag vertically to fader-adjust
-  the value (linear range mapping, or log-domain for `nudgeMultiplicative`
-  fields like Attack/Release), gated behind a small dead zone so a plain
-  click-and-release still falls through to the click/double-click-to-edit
-  logic unchanged (safe despite the sibling project leaving the
-  equivalent feature out of its own matrix cells: DGL keeps delivering
-  motion events to the widget that took the press). Keyboard events reach the owning
-  `UICompressorMono`/`Stereo` (not this subwidget), matching that
-  project's "keyboard events reach the top-level UI" convention -- the UI
-  checks `isEditing()` and forwards. `beginEdit()` calls `getWindow().
-  focus()` (an embedded plugin window isn't guaranteed to already hold
-  keyboard focus just because a widget inside it was clicked -- the exact
-  fix, for the exact same reason, as the sibling project's own
-  `beginCellTextEdit()`, missed here originally); an active edit shows a
-  trailing caret and pure-black-on-amber text for maximum contrast, and a
-  press anywhere (not just Enter) commits it first before doing anything
-  else, so no press is ever left unclaimed -- both fixes for a real
-  stuck-edit-mode bug.
-- **`LevelMeterWidget`**: 1 or 2 vertical bars, RMS gradient fill + peak
-  line + a latching clip LED.
-- **`CompressorGraphWidget`**: the transfer curve + knee shading + live
-  marker(s) + GR meter column(s) + scrolling GR history strip, all in one
-  widget (combined rather than split further, since they share one
-  coordinate mapping and redraw together). Two handles sit directly on
-  the curve -- Threshold (horizontal drag) and Ratio (vertical drag,
-  further up the slope) -- using an absolute pointer-position -> value
-  mapping, plus scroll-anywhere-over-the-curve to adjust Knee. Both
-  handles and the drawn curve share one set of `dbToPxX/Y()`/
-  `pxToDbX/Y()` coordinate-mapping functions so the hit regions can never
-  drift from what's actually drawn.
-- **`UICompressorMono`/`UICompressorStereo`**: own a small `paramCache_`
-  array (populated by `parameterChanged()`, since DPF's `UI` base class
-  only pushes values, it doesn't expose a getter) and wire the widgets
-  above together. The Stereo UI additionally owns the Stereo Mode toggle
-  button and relabels the meters/graph (L/R vs Mid/Side) when the mode
-  changes. Both own Load.../Save As... buttons (`gui/PresetIO.hpp`'s
-  dependency-free key=value text format, `.mcmp`/`.mcsp`) and a Measure
-  button plus the Volume Compensation toggle, whose own label doubles as
-  the compensation readout ("measuring..." / "+4.2 dB") (since removed,
-  see `CompensationGain` above).
-
-## Known limitations
-
-The stereo compensation gain is measured from the combined mono-downmixed
-bus rather than per-detector (Dual-Mono/Mid-Side), which is the right
-choice for "keep the overall loudness constant" but won't independently
-track just one side's own level changing differently from the other.
-
+- **`SimpleButton`**, **`TooltipOverlay`** (hover descriptions),
+  **`LevelMeterWidget`** (bargraphs with peak line and clip LED).
+- **`ParamStripWidget`** -- a row of value fields from a list of
+  `ParamFieldSpec`s: click or double-click to type, drag vertically
+  (linear, or logarithmic for Attack/Release), scroll to nudge, Alt for
+  finer steps. Keyboard input goes to the owning UI, which forwards it
+  while a field is being edited; starting an edit takes keyboard focus.
+- **`CompressorGraphWidget`** -- transfer curve, knee shading, live
+  marker, Threshold and Ratio handles, scroll for Knee, bipolar
+  gain-reduction column with peak hold, and history strip. Drawing and
+  hit-testing share one coordinate mapping.
+- **`LimiterGraphWidget`** -- the Limiter's curve with Threshold handle and
+  Ceiling line.
+- **`ContourGraphWidget`** -- curve editing (tools, selection, handles,
+  links, context menu), threshold line, trigger-side shading and the
+  trail of dots; **`NodeListWidget`** -- the numeric node list.
+- **`SidechainScopeWidget`** -- the trigger's level history and its
+  spectrum before and after the filter, with draggable filter corners.
+- **`UICompressorMono` / `UICompressorStereo` / `UILimiter` /
+  `UIContour`** -- keep a cache of all parameter values, wire the widgets
+  together, and implement A/B, undo/redo and presets (`PresetIO.hpp`, a
+  dependency-free key=value text format).

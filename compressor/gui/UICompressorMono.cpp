@@ -343,8 +343,8 @@ void UICompressorMono::parameterChanged(uint32_t index, float value)
         graph_->setCurveParams(paramCache_[kParamThreshold], paramCache_[kParamRatio], ratioUpMode_, paramCache_[kParamKnee]);
         break;
     case kParamOutputGain:
-        // "make the makeup gain visible in the gain reduction" (direct
-        // ask) -- see CompressorGraphWidget::drawGrMeterColumn()'s own
+        // Makeup gain is shown in the gain-reduction meter -- see
+        // CompressorGraphWidget::drawGrMeterColumn()'s own
         // comment for the marker itself; this plugin has no B column
         // (bDb unused, passed as 0).
         graph_->setMakeupGainDb(paramCache_[kParamOutputGain], 0.0f);

@@ -456,7 +456,7 @@ void DynEqGraphWidget2::onNanoDisplay()
     // response curve at the two extremes its gain can actually reach:
     // gainDb+rangeDb at the top when upward compression (ratioUp > 1) can
     // lift it, gainDb-rangeDb at the bottom when downward compression
-    // (ratio > 1) can pull it down -- "up and down compressing" shown as
+    // (ratio > 1) can pull it down -- downward and upward compression shown as
     // one region that can extend either way, or both at once. Whichever
     // direction isn't active for this band just collapses that edge back
     // to gainDb (its own resting value), the same shape the original
@@ -624,6 +624,7 @@ void DynEqGraphWidget2::onNanoDisplay()
         const float ny = gainToY(b.gainDb);
         const bool selected = (i == selectedBand_);
         const bool hovered = (i == hoverBand_);
+        const bool auditionHeld = (i == auditionHoldBand_);
         const Color col = b.enabled ? bandColor(i) : Color(110, 112, 116);
 
         // Band Shelf: plateau line + corner handles, same as EqGraphWidget.
@@ -657,6 +658,16 @@ void DynEqGraphWidget2::onNanoDisplay()
             circle(nx, ny, 9.5f);
             strokeColor(Color(255, 255, 255, selected ? 0.8f : 0.43f));
             strokeWidth(1.6f);
+            stroke();
+        }
+        if (auditionHeld)
+        {
+            // Gold ring for the momentary right-button audition, same as
+            // EqGraphWidget's -- distinct from the white selection ring.
+            beginPath();
+            circle(nx, ny, 10.5f);
+            strokeColor(Color(235, 195, 60, 0.9f));
+            strokeWidth(2.0f);
             stroke();
         }
         beginPath();
@@ -963,16 +974,46 @@ bool DynEqGraphWidget2::onMouse(const MouseEvent& ev)
 
     if (ev.button == kMouseButtonRight)
     {
-        if (!ev.press) return menuOpen_;
+        if (!ev.press)
+        {
+            if (rightPressPending_)
+            {
+                // Never crossed the drag dead zone: a plain click -- open
+                // the context menu now.
+                rightPressPending_ = false;
+                openContextMenu(rightPressBand_, float(rightPressX_), float(rightPressY_));
+                rightPressBand_ = -1;
+                repaint();
+                return true;
+            }
+            // Release of a right-button drag: end its momentary audition.
+            if (auditionHoldBand_ >= 0)
+            {
+                host_->endBandAudition();
+                auditionHoldBand_ = -1;
+                dragBand_ = -1;
+                repaint();
+            }
+            return menuOpen_;
+        }
         const bool inGraph = x >= graphX_ && x < graphX_ + graphW_ && y >= graphY_ && y < graphY_ + graphH_;
         if (!inGraph) return false;
         const int hit = nodeAt(x, y);
-        if (hit < 0) return false;
-        selectedBand_ = hit;
-        if (onSelectionChanged_) onSelectionChanged_(hit);
-        openContextMenu(hit, float(x), float(y));
-        repaint();
-        return true;
+        if (hit >= 0)
+        {
+            selectedBand_ = hit;
+            if (onSelectionChanged_) onSelectionChanged_(hit);
+            // Menu or audition-drag is decided by onMotion() (dead zone
+            // crossed) or the release above (it never was).
+            rightPressPending_ = true;
+            rightPressBand_ = hit;
+            rightPressX_ = x;
+            rightPressY_ = y;
+            repaint();
+            return true;
+        }
+        if (menuOpen_) { closeContextMenu(); repaint(); return true; }
+        return false;
     }
 
     if (ev.button != kMouseButtonLeft) return false;
@@ -1135,6 +1176,28 @@ bool DynEqGraphWidget2::onMotion(const MotionEvent& ev)
         return true;
     }
 
+    if (rightPressPending_)
+    {
+        const double dx = x - rightPressX_;
+        const double dy = y - rightPressY_;
+        if (std::sqrt(dx * dx + dy * dy) > kRightDragDeadZonePx)
+        {
+            // A drag, not a click: audition while dragging (moving the band
+            // through the same dragBand_ path as a left drag); no menu.
+            rightPressPending_ = false;
+            auditionHoldBand_ = rightPressBand_;
+            dragBand_ = rightPressBand_;
+            dragEdge_ = 0;
+            host_->beginBandAudition(rightPressBand_);
+            rightPressBand_ = -1;
+            repaint();
+        }
+        else
+        {
+            return true; // still deciding
+        }
+    }
+
     if (dragBand_ >= 0)
     {
         const double cx = std::max(double(graphX_), std::min(double(graphX_ + graphW_ - 1), x));
@@ -1168,7 +1231,8 @@ bool DynEqGraphWidget2::onScroll(const ScrollEvent& ev)
         const double dir = ev.delta.getY() > 0.0 ? 1.0 : (ev.delta.getY() < 0.0 ? -1.0 : 0.0);
         if (dir != 0.0)
         {
-            const double v = std::max(kXfeedGainMinDb, std::min(kXfeedGainMaxDb, current + dir * 0.5));
+            const double step = (ev.mod & kModifierAlt) ? 0.05 : 0.5; // Alt = 10x finer, as everywhere
+            const double v = std::max(kXfeedGainMinDb, std::min(kXfeedGainMaxDb, current + dir * step));
             (host_->*setter)(v);
             repaint();
         }

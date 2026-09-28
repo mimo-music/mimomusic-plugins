@@ -3,18 +3,15 @@
 
 // UIDynEq2.hpp
 //
-// Top-level UI for the dynamic EQ plugin -- owns the actual
-// ssfilter::DynamicEqModel2, implements ssgui::IDynEqEditorHost2 for
-// DynEqGraphWidget2, and drives two ParamStripWidget instances exactly like
-// UIMbCompressor does: one for the always-present Output Trim/Spectrum
-// Smoothing fields, one re-targeted at whichever band is currently
-// *selected* -- Freq/Gain/Q/Threshold/Ratio/Range/Attack/Release, eight
-// numeric fields, decisively past EqModel's 3 or MbCompressorModel's 5, so
-// the same "select a band, edit its fields in one strip" simplification
-// UIMbCompressor's own file comment argues for applies here even more
-// strongly (Freq/Gain are also graph-draggable, Q is also scroll-
-// adjustable -- same redundancy EqGraphWidget/BandListWidget already have
-// -- but the five dynamics fields have no on-graph handle of their own).
+// Top-level UI for Dynamic EQ 2 -- owns the actual ssfilter::DynamicEqModel2
+// and implements ssgui::IDynEqEditorHost2 for DynEqGraphWidget2 and
+// DynEqBandListWidget2. Laid out like the Parametric EQ (UIEq): row 1 file
+// ops, Reset/Bypass, A/B and Undo/Redo; row 2 +Band, Audition and the
+// one-line Spectrum Source / Smoothing / Resolution / Output Trim fields;
+// then the graph, and below it the band list with every band's settings.
+// Text editing (list fields, the two inline fields, the harmonic
+// custom-factor input) is one state machine here (editTarget_), since
+// keyboard events reach the top-level UI.
 //
 // Load/Save (".ssdynjson") and "Export to State-Space..." follow the same
 // file-dialog pattern as every sibling plugin's UI.
@@ -26,9 +23,9 @@
 #include "../../plugin/dsp/DynamicEqModel2.hpp"
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "../../plugin_dyn_eq2/PluginDynEq2.hpp" // for kNumMirroredBands
-#include "../ParamStripWidget.hpp"
 #include "../SimpleButton.hpp"
 #include "../TooltipOverlay.hpp"
+#include "DynEqBandListWidget2.hpp"
 #include "DynEqEditorHost2.hpp"
 #include "DynEqGraphWidget2.hpp"
 
@@ -58,6 +55,8 @@ protected:
     bool onCharacterInput(const CharacterInputEvent& ev) override;
     bool onKeyboard(const KeyboardEvent& ev) override;
     bool onMouse(const MouseEvent& ev) override;
+    bool onMotion(const MotionEvent& ev) override;
+    bool onScroll(const ScrollEvent& ev) override;
 
     void uiFileBrowserSelected(const char* filename) override;
 
@@ -92,6 +91,10 @@ protected:
     void beginHarmonicFactorEdit(int sourceIndex) override;
     bool isEditingHarmonicFactor(int sourceIndex, std::string& liveText) const override;
     void commitHarmonicFactorEdit() override;
+    void beginBandAudition(int index) override;
+    void endBandAudition() override;
+    void beginBandTextEdit(int index, ssgui::DynEqField field, bool clearValue) override;
+    bool isEditingBandField(int index, ssgui::DynEqField field, std::string& liveText) const override;
 
 private:
     void layout();
@@ -106,12 +109,20 @@ private:
     // declaration comment (gui/eq/UIEq.hpp) for the full reasoning.
     void applyMirrorStagingIfComplete(uint32_t index, float value);
     void selectBand(int index);
-    void refreshBandStripLabels();
-    // Whether bandStrip_'s third field is currently BW (the selected band
-    // is a Band Shelf) rather than Q -- refreshBandStripLabels() swaps the
-    // field list only when this changes.
-    bool stripShowsBandwidth_ = false;
-    void refreshAuditionColors(); // keeps btnAudition_'s colors/enabled-state in sync with auditioning_/selectedBand_
+    // Keeps btnAudition_ in sync with auditioning_/selectedBand_, and turns
+    // Audition off when there is no band left to preview.
+    void refreshAuditionColors();
+
+    // -- Text editing (see this file's top comment) --
+    enum class EditTarget { None, BandField, OutputTrim, SpectrumSmoothMs, HarmonicFactor };
+    void commitEdit();
+    void cancelEdit();
+    void beginTrimTextEdit(bool clearValue);
+    void beginSmoothTextEdit(bool clearValue);
+    void setInlineFieldValue(EditTarget which, double v);
+    // Double-click detection for the two inline fields (a double-click
+    // starts typing from an empty buffer, as everywhere else).
+    bool checkInlineDoubleClick(int fieldId);
 
     void loadPresetFile(const char* path);
     void savePresetFile(const char* path);
@@ -145,50 +156,32 @@ private:
     int mirrorStagingSoloedBand_ = -1;
     double mirrorStagingXfeedLtoR_ = -60.0, mirrorStagingXfeedRtoL_ = -60.0;
 
-    // The graph's own "Create Harmonic Twin -> Custom Factor..." text
-    // edit -- see IDynEqEditorHost2::beginHarmonicFactorEdit()'s own
-    // comment. A dedicated flag/buffer rather than folding this into a
-    // general EditTarget enum the way the sibling UIEq.hpp needs to
-    // (this UI's every OTHER numeric field already has its own self-
-    // contained edit state inside ParamStripWidget -- this is the only
-    // field that has to live here instead, since it's anchored to the
-    // graph's own floating menu, not a fixed toolbar strip).
-    bool editingHarmonicFactor_ = false;
-    int pendingHarmonicSourceBand_ = -1;
-    std::string harmonicFactorEditBuffer_;
+    EditTarget editTarget_ = EditTarget::None;
+    int editBandIndex_ = -1;
+    ssgui::DynEqField editBandField_ = ssgui::DynEqField::Freq;
+    std::string editBuffer_;
+    int pendingHarmonicSourceBand_ = -1; // the band a custom-factor twin is created from
+
+    // Output Trim / Spectrum Smoothing: press-then-release is a click (text
+    // edit), press-then-drag a vertical fader, as in UIEq.
+    EditTarget inlinePress_ = EditTarget::None;
+    bool inlineDragging_ = false;
+    double inlineDragStartY_ = 0.0, inlineDragStartValue_ = 0.0;
+    int lastClickInlineField_ = -1;
+    std::chrono::steady_clock::time_point lastClickInlineTime_{};
+
+    // The persistent Audition state when a right-button audition-hold
+    // started -- restored by endBandAudition() (see UIEq's identical member).
+    bool auditionHoldPrevState_ = false;
 
     DGL_NAMESPACE::DynEqGraphWidget2* graph_ = nullptr;
-    DGL_NAMESPACE::ParamStripWidget* globalStrip_ = nullptr; // Output Trim / Spectrum Smooth
-    DGL_NAMESPACE::ParamStripWidget* bandStrip_ = nullptr;   // Freq/Gain/Q/Threshold/Ratio/Range/Attack/Release, for selectedBand_
+    DGL_NAMESPACE::DynEqBandListWidget2* list_ = nullptr;
 
     DGL_NAMESPACE::SimpleButton* btnLoad_       = nullptr;
     DGL_NAMESPACE::SimpleButton* btnSave_       = nullptr;
     DGL_NAMESPACE::SimpleButton* btnExport_     = nullptr;
     DGL_NAMESPACE::SimpleButton* btnAddBand_    = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnDeleteBand_ = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnPrevBand_   = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnNextBand_   = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnEnabled_    = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnSolo_       = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnDynamics_   = nullptr;
-    // Click-to-cycle Both -> Left -> Right -> L->R -> R->L -> Both (the
-    // Parametric EQ's own unified Channel-column cycle,
-    // ssfilter::advanceChannelCrossFeed(), EqModel.hpp), so both plugins
-    // behave identically.
-    // Click-to-cycle Bell -> Low Shelf -> High Shelf -> Band Shelf -> Bell.
-    // See DynamicEqBand2::type's own comment for why only these (of the
-    // sibling EQ's full EqBandType) are reachable here.
-    DGL_NAMESPACE::SimpleButton* btnType_        = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnChannel_    = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnAudition_     = nullptr; // previews selectedBand_'s isolated detector output, see PluginDynEq2.hpp's kParamAudition comment
-    // Harmonic link, as in the Parametric EQ. btnLinkTwin_ creates an
-    // octave (x2) twin of selectedBand_, linked to it; btnUnlink_ removes
-    // selectedBand_ from its own harmonic group. See
-    // IDynEqEditorHost2::createHarmonicTwin()'s own comment for why this
-    // is a fixed x2 factor rather than the sibling EQ's own preset/custom
-    // factor menu.
-    DGL_NAMESPACE::SimpleButton* btnLinkTwin_   = nullptr;
-    DGL_NAMESPACE::SimpleButton* btnUnlink_     = nullptr;
+    DGL_NAMESPACE::SimpleButton* btnAudition_   = nullptr; // previews selectedBand_'s isolated detector output, see PluginDynEq2.hpp's kParamAudition comment
     DGL_NAMESPACE::SimpleButton* btnReset_      = nullptr;
     DGL_NAMESPACE::SimpleButton* btnBypass_     = nullptr;
 
@@ -215,8 +208,8 @@ private:
     static constexpr int kUndoDebounceTicks = 15;
     static constexpr size_t kMaxUndoDepth = 100;
 
-    float bandLabelX_ = 0, bandLabelY_ = 0, bandLabelW_ = 0;
-
+    float trimFieldX_ = 0, trimFieldY_ = 0, trimFieldW_ = 0, trimFieldH_ = 0;
+    float smoothFieldX_ = 0, smoothFieldY_ = 0, smoothFieldW_ = 0, smoothFieldH_ = 0;
     float spectrumModeFieldX_ = 0, spectrumModeFieldY_ = 0, spectrumModeFieldW_ = 0, spectrumModeFieldH_ = 0;
     float fftSizeFieldX_ = 0, fftSizeFieldY_ = 0, fftSizeFieldW_ = 0, fftSizeFieldH_ = 0;
     // This plugin's own default is the largest preset, not the shared

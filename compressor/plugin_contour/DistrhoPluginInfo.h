@@ -20,14 +20,13 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/contour"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.contour"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A 2-in/2-out dynamics processor with a freely-drawn input/output " \
-    "curve (linear or monotone-spline pillar points) instead of a fixed " \
-    "ratio/knee formula, plus an independent threshold and an Above/Below " \
-    "trigger condition -- one mechanism that can build ordinary downward " \
-    "compression, upward compression, limiting, or a gate/expander, all " \
-    "from the same drawn shape. Shares its Linked/Dual-Mono/Mid-Side " \
-    "stereo mode, external sidechain input, and measured volume-" \
-    "compensation stage with the sibling Compressor Stereo plugin."
+    "A stereo dynamics processor with a freely drawn input/output curve " \
+    "instead of a ratio/knee formula, plus a threshold with an " \
+    "Above/Below trigger that switches the sound between the curve and " \
+    "the unchanged diagonal -- one engine for downward and upward " \
+    "compression, limiting, gates and expanders. Linked, Dual-Mono or " \
+    "Mid-Side processing, an external sidechain input, and trigger " \
+    "gain, band filter and lookahead."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 #define DISTRHO_PLUGIN_BRAND_ID Mimo

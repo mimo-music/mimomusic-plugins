@@ -140,8 +140,8 @@ Color ContourGraphWidget::trailColor(bool secondary, float frac, bool triggered)
         Color(55, 46, 110, 0.0f),    // about to vanish: dark violet, transparent
     };
     // Dots where the trigger condition WAS met use a green palette (same idea, same
-    // age progression, near-white when brand new): green = "the curve is engaged",
-    // matching the threshold line turning green -- "colorchange on the points".
+    // age progression, near-white when brand new): green = the curve is engaged,
+    // matching the threshold line turning green.
     static const Color kGreenStops[4] = {
         Color(238, 255, 242, 0.85f),
         Color(110, 225, 140, 0.65f),
@@ -218,9 +218,9 @@ bool ContourGraphWidget::hitTrailLegend(float px, float py) const
 
 void ContourGraphWidget::drawTrailLegend(float x, float y, float w, float h)
 {
-    // Doubles as both the "what does this color mean" key and the
-    // "settings to see where the computer limit is" readout (direct
-    // ask): the gradient itself IS the colormap trail dots are drawn
+    // Doubles as both the "what does this color mean" key and a readout
+    // of the configured trail length (where the display's limit is): the
+    // gradient itself IS the colormap trail dots are drawn
     // with, so its own extent literally shows what a fully-aged trail
     // point looks like; the text names the configured duration (scroll
     // here to change it, kTrailSecondsMin..Max) and, whenever the trail
@@ -1076,8 +1076,7 @@ int ContourGraphWidget::hitPoint(float px, float py) const
     // by index order -- with two points close to their own minimum
     // allowed spacing, their hit circles overlap, and always favoring the
     // lower index there made grabbing/dragging the *other* point feel
-    // random ("sometimes moving nodes works, sometimes it doesn't")
-    // depending on exactly where inside the overlap a click landed.
+    // random, depending on exactly where inside the overlap a click landed.
     int best = -1;
     float bestDist = nodeHitRadius();
     for (int i = 0; i < curve_.pointCount(); ++i)
@@ -2141,7 +2140,8 @@ bool ContourGraphWidget::onScroll(const ScrollEvent& ev)
     if (!hitTrailLegend(float(ev.pos.getX()), float(ev.pos.getY()))) return false;
     const float dir = ev.delta.getY() > 0.0f ? 1.0f : (ev.delta.getY() < 0.0f ? -1.0f : 0.0f);
     if (dir == 0.0f) return true;
-    trailSeconds_ = std::max(kTrailSecondsMin, std::min(kTrailSecondsMax, trailSeconds_ + dir * 0.25f));
+    const float step = (ev.mod & kModifierAlt) ? 0.025f : 0.25f; // Alt = 10x finer, as everywhere
+    trailSeconds_ = std::max(kTrailSecondsMin, std::min(kTrailSecondsMax, trailSeconds_ + dir * step));
     if (onTrailSecondsChanged_) onTrailSecondsChanged_(trailSeconds_);
     repaint();
     return true;

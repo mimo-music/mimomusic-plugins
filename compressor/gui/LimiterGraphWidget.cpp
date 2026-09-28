@@ -287,7 +287,7 @@ void LimiterGraphWidget::drawGrMeterColumn(float x, float y, float w, float h)
         resetScissor();
     }
 
-    // Peak-hold marker -- "the peak that is recovering", see setLiveLevels().
+    // Peak-hold marker (recovers slowly), see setLiveLevels().
     if (grHoldDb_ < -0.01f)
     {
         const float holdY = yOf(grHoldDb_);

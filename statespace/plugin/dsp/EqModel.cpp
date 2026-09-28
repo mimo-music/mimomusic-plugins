@@ -148,7 +148,7 @@ int createHarmonicTwin(EqModel& model, int sourceIndex, double factor, double sa
         source.harmonicRatio = 1.0;
     }
 
-    EqBand twin = source; // copies type/gain/Q/slopeStages/bandwidth/enabled -- "another filter same to the selected"
+    EqBand twin = source; // copies type/gain/Q/slopeStages/bandwidth/enabled
     twin.freqHz = std::max(1.0, std::min(sampleRate * 0.499, source.freqHz * factor));
     twin.harmonicGroup = source.harmonicGroup;
     twin.harmonicRatio = source.harmonicRatio * factor; // chains correctly if source was already linked, see this function's own declaration comment

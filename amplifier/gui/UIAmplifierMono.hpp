@@ -3,12 +3,9 @@
 
 // UIAmplifierMono.hpp
 //
-// A small, dedicated GUI -- this project's very first (see
-// DistrhoPluginInfo.h's own comment for why the original "no GUI at all"
-// design changed): Listen/Normalize needs a live level readout and a
-// start/stop control a host's own generic parameter editor can't give it,
-// so once a GUI existed for that anyway, Gain/Bypass got real widgets too
-// rather than staying host-generic while everything else got a custom one.
+// A small, dedicated GUI: Listen/Normalize needs a live level readout and
+// a start/stop control a host's generic parameter editor can't give it,
+// and Gain/Bypass get real widgets alongside it.
 //
 // Layout: Bypass + Listen buttons, a Peak/RMS toggle (a two-way swap
 // button, same idiom as ../statespace's own Ratio
@@ -68,9 +65,7 @@ private:
     void refreshModeLabel();
     void applyListenResult(); // computes+pushes the new Gain -- see this file's own top comment
 
-    // -- Undo/redo -- no A/B compare here (excluded from that rollout by
-    // request -- "a compare function on all plugins but amplification"),
-    // but undo/redo covers "all plugins" without that exclusion. Same
+    // -- Undo/redo (the amplifiers have no A/B compare). Same
     // mechanism/reasoning as ../../compressor's UICompressorMono.cpp, see
     // that file's own comments for the full design writeup.
     presetio::KeyValues captureSnapshot() const;

@@ -21,12 +21,13 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/statespace-eq"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.statespace-eq"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "Parametric EQ with an unbounded band count -- click to add a band " \
-    "directly on the frequency graph, drag to shape it. Built on the same " \
-    "state-space core as Matrix Filter: every band is realized as a " \
-    "stability-guarded biquad and the assembled result can be exported " \
-    "as a .ssjson preset to inspect or hand-edit its raw coefficients " \
-    "there."
+    "Parametric EQ with up to 32 bands -- click on the frequency graph " \
+    "to add a band, drag to shape it. Bell, shelf, Band Shelf, pass, " \
+    "notch and all-pass types, harmonic band linking, per-band " \
+    "Left/Right routing and stereo crossfeed, a live spectrum analyzer " \
+    "and per-band Audition. Built on the same state-space core as " \
+    "Matrix Filter; the result can be exported as a .ssjson preset to " \
+    "inspect or edit its coefficients there."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from the base plugin's SSmm/Mtrc so hosts never confuse the two.

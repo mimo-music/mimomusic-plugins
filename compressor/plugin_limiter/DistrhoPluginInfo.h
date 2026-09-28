@@ -64,14 +64,12 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/limiter"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.limiter"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A 2-in/2-out brick-wall-style limiter built on the same feed-forward " \
-    "dynamics core as the sibling Compressor plugins: Threshold, Attack, " \
-    "Release, Lookahead, Knee, Input/Output Gain, a Boost makeup-gain " \
-    "toggle, and a hard output Ceiling the true peak output can never " \
-    "cross. Ratio is fixed internally (a limiter is inherently near-" \
-    "brick-wall, not a tunable ratio) and detection is always stereo-" \
-    "linked, keeping the control set close to what dedicated limiter " \
-    "plugins actually expose."
+    "A stereo limiter with lookahead and a hard output ceiling: " \
+    "threshold, attack, release, lookahead, knee, input/output gain and " \
+    "a Boost switch that adds the threshold's reduction back. Two " \
+    "algorithms: Classic (an envelope-follower limiter) and True Peak " \
+    "(a sample-accurate lookahead limiter that never lets the output " \
+    "exceed the threshold). Detection is always stereo-linked."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from the sibling compressor plugins' CMmo/CMst.

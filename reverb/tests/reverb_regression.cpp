@@ -175,8 +175,8 @@ int main() {
     // [R5] Stereo cross-coupling: an L-only impulse must produce
     // significant R-channel energy within the first 80ms (the feedback
     // matrix mixes every line, including R-routed ones, every sample) --
-    // otherwise "reflect signals from one stereo channel to the other and
-    // back" (the literal ask) would not actually be happening.
+    // otherwise signals would not actually cross from one stereo channel
+    // to the other and back.
     {
         ReverbEngine eng;
         eng.prepare(room, fs, t60Dc, t60Ny);

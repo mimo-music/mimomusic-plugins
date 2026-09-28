@@ -327,7 +327,7 @@ dpf_add_plugin(dynamic_eq2
   FILES_UI
       gui/dyneq2/UIDynEq2.cpp
       gui/dyneq2/DynEqGraphWidget2.cpp
-      gui/ParamStripWidget.cpp
+      gui/dyneq2/DynEqBandListWidget2.cpp
       gui/SimpleButton.cpp
       gui/TooltipOverlay.cpp
       # Same reasoning as every sibling block above: the DSP and UI sides

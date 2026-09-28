@@ -31,11 +31,13 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/reverb_dense"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.reverb_dense"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A stereo reverb built as a 16-line Feedback Delay Network -- dense " \
-    "mode spacing for a smooth, grain-free tail. Same room-dimension/" \
-    "Decay/Damping/Diffusion/Modulation/Spread/Balance controls and " \
-    "tempo-synced decay as Reverb Plate -- pick whichever character " \
-    "suits the material. See docs/REVERB_CONCEPT.md for the full design."
+    "A stereo reverb built as a 16-line feedback delay network with " \
+    "densely spaced modes, for a smooth, grain-free tail. Room " \
+    "dimensions, pre-delay, decay time (optionally synced to the host " \
+    "tempo), damping, diffusion, modulation, spread, balance and " \
+    "dry/wet, plus a parametric EQ with spectrum display on the reverb " \
+    "signal. Same controls as Reverb Plate -- pick whichever character " \
+    "suits the material."
 
 // 4-character code packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from every sibling MimoMusic plugin's own code (SSmm/SSeq/SSem/

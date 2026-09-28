@@ -353,7 +353,7 @@ void DynEqGraphWidget::onNanoDisplay()
     // response curve at the two extremes its gain can actually reach:
     // gainDb+rangeDb at the top when upward compression (ratioUp > 1) can
     // lift it, gainDb-rangeDb at the bottom when downward compression
-    // (ratio > 1) can pull it down -- "up and down compressing" shown as
+    // (ratio > 1) can pull it down -- downward and upward compression shown as
     // one region that can extend either way, or both at once. Whichever
     // direction isn't active for this band just collapses that edge back
     // to gainDb (its own resting value), the same shape the original

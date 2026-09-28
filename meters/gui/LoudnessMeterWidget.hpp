@@ -269,9 +269,8 @@ private:
     // view transform over the same fixed -60..0 binned data
     // ssmeter::DistributionHistogram always collects (see its own
     // comment); zooming never changes what's collected, only what
-    // fraction of it is currently drawn across the panel's width. Direct
-    // ask: "would be cool to have a x-axis zoom centred on the mouse."
-    // Defaults to the full range (no zoom) -- see onScroll() for how
+    // fraction of it is currently drawn across the panel's width, zooming
+    // around the mouse. Defaults to the full range (no zoom) -- see onScroll() for how
     // scrolling over the panel narrows/widens this window around the
     // cursor, and onMouse() for the double-click-to-reset back to these
     // defaults.

@@ -296,8 +296,8 @@ UICompressorStereo::UICompressorStereo()
     refreshRatioDirectionLabel(btnRatioDirection_, ratioUpMode_);
 
     // Dual-Mono/Mid-Side's own pair, one per displayed compressor --
-    // "double the gui objects instead of the editing switch" (direct
-    // ask) applied to Ratio Direction too, not just Threshold/Ratio/
+    // Duplicated GUI objects (one per compressor) instead of an editing
+    // switch -- applied to Ratio Direction too, not just Threshold/Ratio/
     // Attack/Release/Knee. btnRatioDirectionB_ falls back to editing A's
     // own ratioUpMode_/"ratioDirection" while linked, same bParam()-style
     // live-link every other B-bank control in the dual layout follows.
@@ -331,9 +331,9 @@ UICompressorStereo::UICompressorStereo()
     });
     refreshRatioDirectionLabel(btnRatioDirectionB_, isChannelBIndependent() ? ratioUpModeB_ : ratioUpMode_);
 
-    // "a button for sidechain options that opens another window" (direct
-    // ask) -- see refreshScPanelVisibility()'s own comment for why this
-    // opens an in-window overlay panel, not a second Window.
+    // The sidechain options button -- see refreshScPanelVisibility()'s own
+    // comment for why this opens an in-window overlay panel, not a second
+    // Window.
     btnSidechainOptions_ = new SimpleButton(this, "Sidechain Options...");
     btnSidechainOptions_->setColors(Color(58, 62, 70), Color(78, 84, 96), Color(230, 232, 236));
     btnSidechainOptions_->setCallback([this] { scPanelVisible_ = !scPanelVisible_; refreshScPanelVisibility(); });
@@ -497,7 +497,7 @@ UICompressorStereo::UICompressorStereo()
     tooltip_->addTarget(btnRatioDirectionA_, "Same as Ratio Direction, for the left/Mid compressor shown on the left.");
     tooltip_->addTarget(btnRatioDirectionB_, "Same as Ratio Direction, for the right/Side compressor shown on the right (edits the left one too while Link is on).");
     tooltip_->addTarget(btnSidechain_, "Toggle external sidechain: detect from the Sidechain input instead of the main signal.");
-    tooltip_->addTarget(btnSidechainOptions_, "Open the sidechain panel: a Highpass/Lowpass filter and a live scope for the detector signal.");
+    tooltip_->addTarget(btnSidechainOptions_, "Open the sidechain panel: gain, a Highpass/Lowpass filter and a live scope for the signal driving the compressor (the main signal, or the external Sidechain input when selected).");
     tooltip_->addTarget(btnScFilterEnable_, "Enable the sidechain's own Highpass/Lowpass band filter, so the compressor only triggers from that band.");
     tooltip_->addTarget(btnScListen_, "Audition the sidechain signal itself (filtered if the filter above is on) in place of the main output.");
     tooltip_->addTarget(btnScLinkLR_, "Link the sidechain filter's Left and Right corners together; off lets them diverge.");
@@ -575,8 +575,8 @@ void UICompressorStereo::updateMeterLabelsForMode()
     refreshDualLayoutVisibility();
 
     // Which Parameter each of stripB_'s/graphB_'s fields actually target
-    // depends directly on isChannelBIndependent() -- "so we can still
-    // amplify the two channel individually" -- so this has to stay in
+    // depends directly on isChannelBIndependent() (so the two channels
+    // can be amplified individually) -- so this has to stay in
     // sync on every mode/Link change, not just the moment it happens to
     // flip.
     refreshStripFields();
@@ -877,10 +877,9 @@ void UICompressorStereo::refreshScStripFields()
         { "Lowpass", "Hz", 100.0f, 20000.0f, 8000.0f, 0.0f, true, 0, r ? kParamScFilterLowpassHzR : kParamScFilterLowpassHz,
           "Sidechain Lowpass: removes content above this frequency from the " + side + " sidechain filter before it reaches the detector." },
         { "SC Gain", "dB", float(sscomp::kSidechainGainMinDb), float(sscomp::kSidechainGainMaxDb), 0.0f, 0.5f, false, 1, kParamSidechainGain,
-          "Sidechain Gain: trim applied to the external key signal before it reaches the detector, independent of Input Gain." },
+          "Sidechain Gain: amplifies the trigger signal (main signal, or the external Sidechain input when selected) before the filter and the detector. Doesn't change the audio you hear, only what drives the compressor." },
     });
-    // "when editing right you can change the fft plot to red also" (direct
-    // ask) -- scScope_ doesn't exist yet the very first time this runs
+    // Tint the scope red while R's corners are edited -- scScope_ doesn't exist yet the very first time this runs
     // (called once during construction, before scScope_ itself is built,
     // same as strip_'s own construction-order guards elsewhere in this
     // file), hence the null check.
@@ -925,8 +924,7 @@ void UICompressorStereo::refreshLinkLabel()
 
 void UICompressorStereo::refreshDualLayoutVisibility()
 {
-    // "Stereo linked mode should still look like it does now" (direct
-    // ask) -- Linked keeps graph_/strip_ exactly as before; Dual-Mono and
+    // Linked keeps graph_/strip_ exactly as before; Dual-Mono and
     // Mid/Side both get the new side-by-side pair, regardless of Link
     // state (Link only governs which Parameters stripB_/graphB_ actually
     // target, see bParam()'s own comment, not whether B is shown at all

@@ -46,8 +46,7 @@ private:
     void refreshInvertColors();
     void applyListenResult(); // computes+pushes the new Gain -- see UIAmplifierMono.cpp's own comment
 
-    // -- Undo/redo -- see UIAmplifierMono.hpp's identical block for why
-    // there's no A/B compare here. Same mechanism as ../../compressor's
+    // -- Undo/redo (no A/B compare, as in UIAmplifierMono). Same mechanism as ../../compressor's
     // UICompressorMono.cpp.
     presetio::KeyValues captureSnapshot() const;
     void applySnapshot(const presetio::KeyValues& values);

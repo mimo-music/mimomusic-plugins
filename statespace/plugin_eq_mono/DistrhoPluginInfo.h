@@ -33,14 +33,12 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/statespace-eq-mono"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.statespace-eq-mono"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "Mono parametric EQ with an unbounded band count -- the same editing " \
-    "GUI and state-space core as Parametric EQ, but natively single- " \
-    "channel: half the per-band state count, so it costs a fraction of " \
-    "the stereo plugin's DSP load on tracks/busses that only ever carry " \
-    "a mono signal. Every band is still a stability-guarded biquad, and " \
-    "the assembled result can be exported as a .ssjson preset (as a " \
-    "stereo pair, both channels identical) to inspect or hand-edit its " \
-    "raw coefficients in Matrix Filter."
+    "Mono Parametric EQ with up to 32 bands -- the same editor and " \
+    "state-space core as Parametric EQ, but natively single-channel: " \
+    "half the filter states per band, so it costs a fraction of the " \
+    "stereo EQ's CPU on mono tracks and busses. The result can be " \
+    "exported as a .ssjson preset (both channels identical) to inspect " \
+    "or edit its coefficients in Matrix Filter."
 
 // Distinct from both siblings' own 4-character codes (Mimo/SSmm,
 // Mimo/SSeq) so hosts never confuse any of the three.

@@ -603,8 +603,8 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
         for (uint32_t i = 0; i < frames; ++i)
         {
             const double l = double(inL[i]), r = double(inR[i]);
-            // "the two bars on the left should also show m/s" (direct
-            // ask) -- same Mid/Side re-derivation the main (non-bypass)
+            // The input meters show M/S in Mid/Side mode -- same Mid/Side
+            // re-derivation the main (non-bypass)
             // path below now uses for its own meters, applied here too so
             // Bypass doesn't leave the meter momentarily showing raw L/R
             // again while the bars are still labeled "M"/"S".
@@ -618,9 +618,11 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
             // Sidechain monitor -- kept running during Bypass too, same
             // "meters still reflect what's actually happening" reasoning
             // the I/O meters right above already follow. See
-            // kParamMeterScLevelDbL/R's own comment.
-            const double scGLRaw = double(scL[i]) * scGainLinBypass;
-            const double scGRRaw = double(scR[i]) * scGainLinBypass;
+            // kParamMeterScLevelDbL/R's own comment. Trigger source: the
+            // external key input while Sidechain is External, the plain
+            // main input otherwise.
+            const double scGLRaw = (sidechainEnabled_ ? double(scL[i]) : l) * scGainLinBypass;
+            const double scGRRaw = (sidechainEnabled_ ? double(scR[i]) : r) * scGainLinBypass;
             double scGL = scGLRaw, scGR = scGRRaw;
             if (scFilterEnabled_)
             {
@@ -683,7 +685,7 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
     const double scGainLin = dbToLinear(sidechainGainDb_);
     // Makeup Gain now applies per-voice (A always; B only once independent,
     // else it mirrors A -- same fallback as attackB/releaseB/etc. above),
-    // "so we can still amplify the two channel individually". Global
+    // so the two channels can be amplified individually. Global
     // Output Gain is the separate, always-single master trim that takes
     // over the old single-outGainLin post-sum role once that split
     // happens -- see kParamGlobalOutputGain's own comment
@@ -702,16 +704,47 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
 
     for (uint32_t i = 0; i < frames; ++i)
     {
-        // The signal actually being compressed is always derived from the
-        // main input -- only the *detector*'s source switches to the
-        // external key input when Sidechain is enabled, fed through
-        // exactly the same per-mode derivation (max(|L|,|R|)/per-channel/
-        // Mid-Side) the main signal's own detector already uses below,
-        // just computed from scL/scR instead. Input Gain deliberately
-        // doesn't apply to the key signal; Sidechain Gain is its own
-        // independent trim for exactly that reason.
-        const double scGLRaw = double(scL[i]) * scGainLin;
-        const double scGRRaw = double(scR[i]) * scGainLin;
+        // Gain-staged main signal for this stereo mode, computed up front
+        // because the trigger signal below can be derived from it.
+        // xgL/xgR: Linked/Dual-Mono's L/R pair; mid/side: Mid/Side's
+        // decoded pair (Input Gain applies after the decode there, Global
+        // Input Gain before it -- see kParamInputGainB/kParamGlobalInputGain).
+        double xgL = 0.0, xgR = 0.0, mid = 0.0, side = 0.0;
+        double intL, intR; // the main signal as an L/R pair, whatever the mode -- the internal trigger source
+        switch (stereoMode_)
+        {
+        case StereoMode::Linked:
+            xgL = double(inL[i]) * inGainLinA;
+            xgR = double(inR[i]) * inGainLinA;
+            intL = xgL; intR = xgR;
+            break;
+        case StereoMode::DualMono:
+            xgL = double(inL[i]) * globalInGainLin * inGainLinA;
+            xgR = double(inR[i]) * globalInGainLin * inGainLinB;
+            intL = xgL; intR = xgR;
+            break;
+        case StereoMode::MidSide:
+        default:
+        {
+            const double gL = double(inL[i]) * globalInGainLin;
+            const double gR = double(inR[i]) * globalInGainLin;
+            mid = ((gL + gR) * 0.5) * inGainLinA;
+            side = ((gL - gR) * 0.5) * inGainLinB;
+            intL = mid + side; intR = mid - side; // exact inverse of the decode
+            break;
+        }
+        }
+
+        // The trigger signal: the external key input while Sidechain is
+        // set to External, the (already gain-staged) main signal otherwise
+        // -- then Sidechain Gain, then the optional Highpass/Lowpass band
+        // filter, identically for both sources. This is what the detector,
+        // the monitor scope and Sidechain Listen all see. The audio being
+        // compressed is always the main input.
+        const double trigL = sidechainEnabled_ ? double(scL[i]) : intL;
+        const double trigR = sidechainEnabled_ ? double(scR[i]) : intR;
+        const double scGLRaw = trigL * scGainLin;
+        const double scGRRaw = trigR * scGainLin;
         double scGL = scGLRaw, scGR = scGRRaw;
         // The frequency filter can be switched off to save DSP --
         // scFilterL_/R_.process() (two one-pole passes each) simply isn't
@@ -721,13 +754,12 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
             scGL = scFilterL_.process(scGL);
             scGR = scFilterR_.process(scGR);
         }
-        // Sidechain monitor -- always fed regardless of scFilterEnabled_/
-        // sidechainEnabled_, see kParamMeterScLevelDbL/R's own comment
+        // Sidechain monitor -- always fed regardless of scFilterEnabled_,
+        // see kParamMeterScLevelDbL/R's own comment
         // (PluginCompressorStereo.hpp): per-channel rectified peak
-        // (scGL/scGR, "the signal currently reaching the detector") for
-        // the scope's own level trace, plus both a pre-filter (raw) and
-        // post-filter/current mono-downmixed spectrum, both always shown,
-        // like on the EQs.
+        // (scGL/scGR, the signal reaching the detector) for the scope's
+        // level trace, plus both a pre-filter (raw) and post-filter
+        // mono-downmixed spectrum, both always shown, like on the EQs.
         scMonitorPeakL_.process(std::fabs(scGL));
         scMonitorPeakR_.process(std::fabs(scGR));
         if (i < kScMonitorScratchFrames)
@@ -751,11 +783,7 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
         {
         case StereoMode::Linked:
         {
-            const double xgL = double(inL[i]) * inGainLinA;
-            const double xgR = double(inR[i]) * inGainLinA;
-            const double detector = sidechainEnabled_
-                ? std::max(std::fabs(scGL), std::fabs(scGR))
-                : std::max(std::fabs(xgL), std::fabs(xgR));
+            const double detector = std::max(std::fabs(scGL), std::fabs(scGR));
             const double grLin = voiceA_.process(detector);
             voiceB_.process(detector); // kept in lock-step purely so its readout mirrors A's, see header comment
             // Wet/Dry per compressor -- standard parallel-compression blend: the gain-staged dry
@@ -773,14 +801,11 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
         case StereoMode::DualMono:
         {
             // Global Input Gain applies first, to the raw stereo pair,
-            // before A's/B's own separate per-channel gains -- see
-            // kParamGlobalInputGain's own comment. globalInGainLin is
-            // exactly 1.0 outside Dual-Mono/Mid-Side, so this is a true
-            // no-op there, not just hidden in the GUI.
-            const double xgL = double(inL[i]) * globalInGainLin * inGainLinA;
-            const double xgR = double(inR[i]) * globalInGainLin * inGainLinB;
-            const double grL = voiceA_.process(sidechainEnabled_ ? std::fabs(scGL) : std::fabs(xgL));
-            const double grR = voiceB_.process(sidechainEnabled_ ? std::fabs(scGR) : std::fabs(xgR));
+            // before A's/B's own separate per-channel gains (xgL/xgR, see
+            // the gain staging above) -- see kParamGlobalInputGain's own
+            // comment.
+            const double grL = voiceA_.process(std::fabs(scGL));
+            const double grR = voiceB_.process(std::fabs(scGR));
             const double wetSigL = xgL * grL * makeupALin;
             const double wetSigR = xgR * grR * makeupBLin;
             yL = xgL * (1.0 - wetA) + wetSigL * wetA;
@@ -792,33 +817,24 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
         case StereoMode::MidSide:
         default:
         {
-            // Input Gain applies *after* the Mid/Side decode here, not
-            // before -- applying A's/B's own separate gains to L/R first
-            // would leak into both Mid and Side instead of cleanly
-            // amplifying one independently of the other, defeating the
-            // entire point of having two (each channel amplified
-            // individually, already established for Makeup Gain, now
-            // extended to Input Gain too). Global Input Gain, by contrast,
-            // applies to the raw L/R pair *before* the decode, so it's woven
-            // into gL/gR here, ahead of the mid/side split itself.
-            // meterInRawL/R (Peak's own "true incoming level" reading,
-            // see below) deliberately stay keyed to the genuinely raw
-            // inL[i]/inR[i], not gL/gR -- Global Input Gain is a
-            // deliberate amplification stage, not part of "what actually
-            // arrived", same reasoning peakInL_/peakInR_ already apply to
+            // mid/side were decoded and gain-staged above: Input Gain
+            // applies *after* the Mid/Side decode, not before -- applying
+            // A's/B's separate gains to L/R first would leak into both Mid
+            // and Side instead of amplifying one independently of the
+            // other. Global Input Gain, by contrast, applies to the raw L/R
+            // pair before the decode.
+            // meterInRawL/R (Peak's "true incoming level" reading, see
+            // below) deliberately stay keyed to the genuinely raw
+            // inL[i]/inR[i] -- Global Input Gain is a deliberate
+            // amplification stage, not part of "what actually arrived",
+            // same reasoning peakInL_/peakInR_ apply to
             // kParamInputGain/kParamInputGainB elsewhere in this function.
             const double trueRawMid = (double(inL[i]) + double(inR[i])) * 0.5;
             const double trueRawSide = (double(inL[i]) - double(inR[i])) * 0.5;
-            const double gL = double(inL[i]) * globalInGainLin;
-            const double gR = double(inR[i]) * globalInGainLin;
-            const double rawMid = (gL + gR) * 0.5;
-            const double rawSide = (gL - gR) * 0.5;
-            const double mid = rawMid * inGainLinA;
-            const double side = rawSide * inGainLinB;
             const double scMid = (scGL + scGR) * 0.5;
             const double scSide = (scGL - scGR) * 0.5;
-            const double grMid = voiceA_.process(sidechainEnabled_ ? std::fabs(scMid) : std::fabs(mid));
-            const double grSide = voiceB_.process(sidechainEnabled_ ? std::fabs(scSide) : std::fabs(side));
+            const double grMid = voiceA_.process(std::fabs(scMid));
+            const double grSide = voiceB_.process(std::fabs(scSide));
             const double wetMid = mid * grMid * makeupALin;
             const double wetSide = side * grSide * makeupBLin;
             yMid = mid * (1.0 - wetA) + wetMid * wetA;

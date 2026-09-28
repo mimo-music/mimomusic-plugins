@@ -201,8 +201,7 @@ struct CurvePoint
     // / edited node itself always moves freely -- the axis only limits what is
     // PROPAGATED to the other members. 0 for unlinked points.
     int linkAxis = 0;
-    // Editing-only diagonal snap ("snap nodes to the diagonal" -- direct
-    // ask): while set, TransferCurve::setPoint() forces outputDb == inputDb
+    // Editing-only diagonal snap: while set, TransferCurve::setPoint() forces outputDb == inputDb
     // on every write to this point, from any source (direct drag, a group
     // drag pulling it along by link, or a numeric edit via moveLinked()), so
     // the point can only ever slide along the unity line -- exactly one
@@ -1037,7 +1036,7 @@ inline double computeCurveGainDb(double levelDb, double thresholdDb, TriggerCond
 // sample by sample, and the dots jump cleanly at the threshold). The audio's level for the curve
 // is a peak follower too: instant attack (a hit's level is known from its first sample, so a gate cannot leak its
 // onset), and the Release time to fall -- which at Release 0 is the instantaneous sample, the curve applied sample by
-// sample ("the audio should follow the line 100%"). Attack is deliberately NOT used for the level: it belongs to the
+// sample, so the audio follows the line exactly. Attack is deliberately NOT used for the level: it belongs to the
 // switch (below).
 //
 // "Attack"/"Release" always refer to the TRIGGER: Attack = how fast the sound moves to its new state (curve or

@@ -9,11 +9,9 @@
 
 START_NAMESPACE_DISTRHO
 
-// Now has a custom GUI (gui/UIAmplifierMono.*) -- see DistrhoPluginInfo.h's
-// own comment for why that changed from the original "no GUI at all"
-// design: the Listen/Normalize feature below needs a live level readout
-// and start/stop control a host's own generic parameter editor can't
-// give it. Still no State: every control, including Listen itself, is an
+// Has a custom GUI (gui/UIAmplifierMono.*): the Listen/Normalize feature
+// below needs a live level readout and start/stop control a host's
+// generic parameter editor can't give it. No State: every control, including Listen itself, is an
 // ordinary automatable Parameter.
 enum ParameterIndex
 {

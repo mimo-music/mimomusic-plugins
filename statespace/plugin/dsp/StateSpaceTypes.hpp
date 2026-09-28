@@ -131,7 +131,7 @@ struct GainCurve
     // (see plugin/dsp/MbCompressorModel.hpp) don't need their own copy of
     // it, rather than duplicating the same seven lines a third time.
     //
-    // `ratioUp` generalizes this to "up and down compressing" in one call:
+    // `ratioUp` generalizes this to downward and upward compression in one call:
     // it shapes the mirrored line *below* the threshold the same way
     // ratioDown shapes the one above it -- makeupDb + (levelDb-thresholdDb)
     // * (1/ratioUp - 1), which is a *positive* (boosting) contribution for

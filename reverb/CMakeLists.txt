@@ -10,33 +10,18 @@
 # side -- see docs/REVERB_CONCEPT.md for why this is its own top-level
 # project rather than a plugin inside ../statespace.
 #
-#   - reverb_dense: 2-in/2-out Feedback Delay Network reverb (16 lines),
-#             room size set in Length/Width/Height, Decay Time/Damping
-#             for the tail, Diffusion/Modulation for echo density and
-#             mode-smoothing, optional host-tempo-synced decay, and a
-#             post-tank parametric EQ (ported EqGraphWidget/
-#             BandListWidget, driving an ordinary StateSpaceEngine on the
-#             wet signal -- see docs/REVERB_CONCEPT.md's "Parametric EQ
-#             integration"). A GUI (gui/UIReverb.*) is included; see that
-#             same doc's GUI section for what's deliberately not in this
-#             first pass (A/B compare, Load/Save/Export, per-field
-#             tooltips, room-shape visualization). Originally shipped
-#             alongside an 8-line "reverb" sibling plugin (removed once
-#             reverb_dense and reverb_plate both sounded clearly better);
-#             the shared
-#             engine foundation those two plugins both used
-#             (plugin/dsp/ReverbEngine.hpp: RoomDims, OnePoleDamping,
-#             DuckState, etc., #include'd by ReverbEngineDense.hpp and
-#             ReverbEnginePlate.hpp) stays, along with its own
-#             `reverb_regression` suite below, since both remaining
-#             plugins still depend on it directly.
-#   - reverb_plate: the same GUI again, this time a genuinely different
-#             topology (plugin/dsp/ReverbEnginePlate.hpp, a Dattorro-
-#             style figure-8 coupled delay network) rather than another
-#             line-count change -- added once reverb_dense (then still
-#             called "reverb_smooth") still showed the same processing
-#             problems as the original 8-line reverb, just a different
-#             color.
+#   - reverb_dense: 2-in/2-out Feedback Delay Network reverb (16 lines,
+#             plugin/dsp/ReverbEngineDense.hpp).
+#   - reverb_plate: 2-in/2-out Dattorro-style plate
+#             (plugin/dsp/ReverbEnginePlate.hpp), a different topology.
+#   Both: room size as Length/Width/Height, Decay Time/Damping,
+#   Diffusion/Modulation, optional host-tempo-synced decay, a parametric
+#   EQ on the wet signal (ported EqGraphWidget/BandListWidget driving an
+#   ordinary StateSpaceEngine -- see docs/REVERB_CONCEPT.md's "EQ on the
+#   reverb signal") and the shared GUI (gui/UIReverb.*). The shared engine
+#   foundation (plugin/dsp/ReverbEngine.hpp: RoomDims, OnePoleDamping,
+#   DuckState, ...) is #include'd by both engines and tested by
+#   `reverb_regression` below.
 #   Two real plugins, not a mode switch on one: the same interface with a
 #   different sound, so each user can pick what they like, or what their
 #   CPU budget allows.

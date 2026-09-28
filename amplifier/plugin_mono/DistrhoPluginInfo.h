@@ -3,20 +3,14 @@
 
 // DistrhoPluginInfo.h -- MimoMusic Amplifier Mono
 //
-// DPF build-time plugin identity/capability metadata. TODO before any real
-// release: DISTRHO_PLUGIN_URI must be a URI you actually control (LV2
-// identity) -- the brand/URI below are the publisher's own identity
-// (MimoMusic, www.mimomusic.art), matching the
-// convention already used in ../basic_statespace_filter_plugin and
-// ../compressor.
+// DPF build-time plugin identity/capability metadata. The brand/URI are
+// the publisher's own identity (MimoMusic, www.mimomusic.art), the same
+// convention as every MimoMusic plugin.
 //
-// DISTRHO_PLUGIN_HAS_UI started at 0 (no custom GUI at all) and was
-// revised to 1 once the Listen/Normalize feature needed a live level
-// readout and a start/stop control no host's own generic parameter editor
-// can give it. The GUI
-// (gui/UIAmplifierMono.*) reuses SimpleButton/ParamStripWidget ported
-// verbatim from ../compressor, same as every custom-GUI plugin in this
-// project family reuses widgets across projects.
+// DISTRHO_PLUGIN_HAS_UI is 1: the Listen/Normalize feature needs a live
+// level readout and a start/stop control no host's generic parameter
+// editor can give it. The GUI (gui/UIAmplifierMono.*) reuses
+// SimpleButton/ParamStripWidget from ../compressor.
 
 #ifndef DISTRHO_PLUGIN_INFO_H_INCLUDED
 #define DISTRHO_PLUGIN_INFO_H_INCLUDED

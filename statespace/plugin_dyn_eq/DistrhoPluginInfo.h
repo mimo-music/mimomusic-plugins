@@ -8,7 +8,7 @@
 // publisher's own identity (MimoMusic, www.mimomusic.art).
 // This is a *separate* plugin from StateSpace MIMO/EQ/EQ Mono/Multiband
 // Compressor (own binary, own LV2/VST3 identity) built from the same DSP
-// core -- see docs/ARCHITECTURE.md's "Dynamic EQ plugin" section and
+// core -- see docs/ARCHITECTURE.md's "Dynamic EQ" section and
 // docs/EXTENDING.md's "Dynamic EQ" section for the mechanism this plugin is
 // a GUI on top of.
 
@@ -23,13 +23,12 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/statespace-dyn-eq"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.statespace-dyn-eq"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "Dynamic EQ: FabFilter Pro-Q-style bell bands that also carry their " \
-    "own threshold/ratio/range/attack/release, so each band's own boost/" \
-    "cut pulls back automatically whenever that specific frequency region " \
-    "gets loud, then relaxes back -- a multiband compressor's per-band " \
-    "dynamics, targeted at an EQ bell shape instead of a crossover slice. " \
-    "Drag a node to place a band, watch its curve move live as it reacts " \
-    "to the program material."
+    "Dynamic EQ: bell bands that also carry their own threshold, ratio, " \
+    "up ratio, range, attack and release, so each band's boost or cut " \
+    "moves automatically when its own frequency region gets loud (or " \
+    "quiet), then relaxes back. Drag a node to place a band and watch " \
+    "its curve move live with the music; per-band Left/Right routing " \
+    "and an Audition preview of the selected band."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from the sibling plugins' SSmm/SSeq/SSem/SSmb so hosts never

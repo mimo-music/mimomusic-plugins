@@ -5,10 +5,7 @@
 
 // Shared ParameterIndex/StateIndex for every reverb "model" plugin
 // (plugin_dense/ "reverb_dense", plugin_plate/ "reverb_plate" -- see
-// docs/REVERB_CONCEPT.md's "Multiple models" section for the full
-// story). Originally extracted out of a third sibling's own
-// plugin_stereo/PluginReverb.hpp (the 8-line "reverb" model, removed
-// once the remaining two both sounded clearly better) specifically so
+// docs/REVERB_CONCEPT.md). Kept in this shared file so
 // gui/UIReverb.hpp/.cpp
 // -- the ENTIRE GUI, unchanged -- can be compiled into all the plugin_ui
 // targets without depending on any one model's own PluginReverb.hpp
@@ -66,9 +63,9 @@ enum ParameterIndex
     kParamHostBpmDetected = 12,   // raw beatsPerMinute currently held by DPF, 0 if never received
     kParamCurrentDecayTimeSec = 13, // <Engine>::currentT60DcSec() -- the decay time actually active right now, manual or tempo-derived
 
-    // 0..1, how strongly the allpass pre-diffuser acts -- added directly
-    // in response to "it sounds very metallic like in a tube", the
-    // standard fix for exactly that symptom in a small-line-count FDN.
+    // 0..1, how strongly the allpass pre-diffuser acts -- against a
+    // metallic, tube-like sound, the standard fix for exactly that symptom
+    // in a small-line-count FDN.
     // Meaningful for every model that has a pre-diffuser stage at all
     // (all three do, in some form -- see each model's own engine header
     // for what this control actually drives there).

@@ -36,13 +36,9 @@
 // from PluginMbCompressor's two SpectrumAnalyzer instances exactly as
 // UIEq feeds EqGraphWidget.
 //
-// Deliberately simpler than EqGraphWidget in two ways, both first-draft
-// scope choices rather than oversights: no right-click context menu (band
-// *type* doesn't exist here to pick from -- every band is the same kind of
-// compressor, only its parameters differ), and no live gain-reduction
-// meter on the graph itself (see docs/EXTENDING.md's "Multiband
-// compressor GUI" section for why that was deferred rather than plumbed
-// through this first pass).
+// Simpler than EqGraphWidget: no right-click context menu (there is no
+// band *type* to pick -- every band is the same kind of compressor). The
+// selected band's live gain/makeup is shown by drawBandGainMeter().
 
 #pragma once
 

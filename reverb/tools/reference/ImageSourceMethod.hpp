@@ -14,7 +14,7 @@
 // (tools/reference/generate_reference_samples.cpp), where computation
 // cost doesn't matter -- hours per set of good test samples is fine.
 //
-// Why THIS as the "expensive, more physically correct" reference, not
+// Why THIS as the expensive, more physically correct reference, not
 // just a bigger/denser FDN (which is what reverb_dense already is, one
 // notch further): reverb/reverb_dense/reverb_plate are all statistical
 // approximations to a diffuse sound field -- structures designed to
@@ -27,8 +27,7 @@
 // expensive on purpose: image count grows arguments ~O(order^3) before
 // filtering (a real, unavoidable cost of computing genuine ray paths
 // instead of approximating their aggregate statistics), which is exactly
-// the "complicated / hours of calculation" trade the user explicitly
-// accepted in exchange for a genuinely independent ground truth -- useful
+// the trade accepted here (long computation) in exchange for a genuinely independent ground truth -- useful
 // later both as a fitting target and, separately, as a way to test how
 // well the sibling ../statespace project's own state-space/matrix-fitting
 // machinery can learn this kind of behavior at all (an explicitly later,
@@ -73,8 +72,8 @@ namespace reference {
 // to the existing function's own 6 taps; each further order roughly
 // triples the search volume (before the many high-order, high-distance,
 // heavily-attenuated taps are implicitly deprioritized by their own tiny
-// gain) -- order 15-25+ is where this starts to earn "hours of
-// calculation" the way the user explicitly said was fine.
+// gain) -- order 15-25+ is where computation takes hours, which is
+// acceptable for an offline reference.
 // `rcvOffsetM` shifts the receiver along the room's own width axis from
 // its default position -- used to place two distinct "ear" receivers
 // (see tools/reference/ReferenceEngine.hpp) for genuine physically-

@@ -77,8 +77,15 @@ plugins afterwards.
 ## Building on macOS
 
 `./build_and_install_macos.sh` is the macOS counterpart, run on a Mac.
-It has not yet been tested end to end, and it does not build the reverb
-yet. Reports and fixes are welcome.
+It needs the Xcode Command Line Tools (`xcode-select --install`) and
+cmake (installed via Homebrew if missing), builds every plugin as a
+universal binary (Apple Silicon + Intel) in LV2, VST3 and AU format, and
+installs them into `~/Library/Audio/Plug-Ins/`. It accepts the same
+flags as the Linux script, plus `--arch` and `--min-macos`.
+`./uninstall.sh` works on macOS too.
+
+The macOS scripts have not yet been tested on a real Mac. Reports and
+fixes are welcome.
 
 ## License
 

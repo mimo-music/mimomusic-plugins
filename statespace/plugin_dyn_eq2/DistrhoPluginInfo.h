@@ -27,13 +27,12 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/statespace-dyn-eq2"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.statespace-dyn-eq2"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "Dynamic EQ 2: FabFilter Pro-Q-style bell bands that also carry their " \
-    "own threshold/ratio/range/attack/release, so each band's own boost/" \
-    "cut pulls back automatically whenever that specific frequency region " \
-    "gets loud, then relaxes back -- a multiband compressor's per-band " \
-    "dynamics, targeted at an EQ bell shape instead of a crossover slice. " \
-    "Drag a node to place a band, watch its curve move live as it reacts " \
-    "to the program material."
+    "Dynamic EQ 2: the Dynamic EQ with Bell, Low Shelf, High Shelf and " \
+    "Band Shelf bands, harmonic band linking (linked bands move and " \
+    "react together) and stereo crossfeed bands. Each band carries its " \
+    "own threshold, ratio, up ratio, range, attack and release, so its " \
+    "boost or cut moves automatically when its own frequency region " \
+    "gets loud (or quiet)."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from the sibling plugins' SSmm/SSeq/SSem/SSmb so hosts never

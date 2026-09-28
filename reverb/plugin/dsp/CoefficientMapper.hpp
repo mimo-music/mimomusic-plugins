@@ -31,7 +31,7 @@
 // Out of scope for a mapper, on mathematical grounds, not just as a
 // convention: anything whose gain depends on signal level (compression,
 // limiting, saturation, gating). See the note in StateSpaceTypes.hpp and
-// docs/EXTENDING.md for why a fixed-coefficient state-space system, at any
+// ../statespace/docs/EXTENDING.md for why a fixed-coefficient state-space system, at any
 // order, cannot represent that.
 
 #pragma once
@@ -420,7 +420,7 @@ inline mono::MonoStateSpaceMatrices makeMonoBiquadChain(const std::vector<Biquad
 // above builds) -- the standard state-space "parallel connection" formula,
 // used to build an N-way frequency-splitting crossover bank for the
 // multiband nonlinear stage (see StateSpaceTypes.hpp's MultibandSchedule
-// and docs/EXTENDING.md's "Multiband compression" section).
+// and ../statespace/docs/EXTENDING.md's "Multiband compression" section).
 //
 // A Linkwitz-Riley crossover of order 2*N is a Butterworth filter of order N applied TWICE in series (LR4 = Butterworth-2
 // squared = two Q=1/sqrt(2) sections; LR8 = Butterworth-4 squared = the Butterworth-4 Q pair 0.5412 / 1.3066, twice; ...).

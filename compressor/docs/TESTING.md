@@ -1,112 +1,73 @@
 # Testing
 
-Two dependency-free tools, both built as normal CMake targets alongside
-the plugins and landing in `build/bin/` -- neither has any DPF/GUI
-dependency, both build and run in well under a second.
-
 ## `dsp_regression` (`tests/dsp_regression.cpp`)
 
-Fast, pure-math checks against `plugin/dsp/CompressorDsp.hpp`'s functions
-in isolation: the soft-knee gain-computer curve (below/above/at the knee
-edges, and that ratio 1:1 never compresses), the envelope follower's
-exponential step response against its closed-form expectation, the
-loudness meter's settled reading against a known constant amplitude, the
-compensation gain converging to (and clamping beyond) a known measured
-gap, the Mid/Side transform's lossless algebra, and an end-to-end
-`CompressorVoice` self-consistency check, plus (added when
-`CompensationGain` was redesigned to measure-then-hold rather than track
-continuously) that a Held value doesn't drift when different audio plays
-through it and that `beginMeasurement()` picks up a fresh gap on request.
-12/12 checks.
+Pure-math checks of the DSP headers, built with CMake into `build/bin/`
+and run by `./build_and_install.sh --test`. No DPF/GUI dependency; runs
+in well under a second. 45 numbered checks:
 
-```sh
-./build/bin/dsp_regression
-```
+- **Compressor core** ([1]–[10]): the soft-knee curve (zero below the
+  knee, the ratio line above it, continuous through the knee, 1:1 never
+  compresses, upward compression symmetric to downward), the envelope
+  follower's step response, the loudness meter's settled value, lossless
+  Mid/Side reconstruction, `CompressorVoice` against the static curve, the
+  True Peak limiter never exceeding its threshold, and its release curve.
+- **Contour's curve** ([11]–[35], [42], [45]): identity default and fixed
+  end points, sorted insert/remove, linear segments and extrapolation,
+  Bezier handles (through the point, exact against a direct Bezier solve,
+  sign symmetry, neighbour limits), Above/Below gating, step/gate pairs,
+  rising/falling nodes and hysteresis, link groups and link axes, threshold
+  links, snap to diagonal, serialization round trips, the packed trail and
+  node Parameters, continuity at the ends, and migration of curves from
+  the older -60 dB window.
+- **Contour's voice** ([16], [21], [36]–[38], [41], [43], [44]): settling
+  to the curve, the trigger action (Curve/Diagonal) with Attack and
+  Release, lookahead, the audio-level mapping (the trigger only switches),
+  exact switching at the threshold with zero times, and low distortion on
+  smooth curves.
+- **Trigger filter and Listen** ([34], [39]): the band filter's -3 dB
+  corners and slopes, and the Listen soft limiter.
 
 ## `audio_testbench` (`tools/testbench/audio_testbench.cpp`)
 
-Runs actual synthetic audio through the *real* per-sample chain --
-`processMono()`/`processStereo()` in that file are wired exactly the way
-`PluginCompressorMono::run()`/`PluginCompressorStereo::run()` are (a
-comment in each says so; if you change one, change the other) -- rather
-than checking formulas in isolation the way `dsp_regression` does. Writes
-WAV files to `tools/testbench/output/` (git-ignored, regenerable) so the
-actual sound can be listened to, not just measured. Run it from the
-project root (its output path is relative, unlike the sibling project's
-`audio_testbench`, which has CMake inject an absolute source-dir define --
-not needed here since this tool has no factory presets to locate).
+Runs synthetic audio through a per-sample chain wired exactly like the
+Compressor plugins' `run()` (if you change one, change the other) and
+writes WAV files to `tools/testbench/output/` for listening. Run it from
+the project root:
 
 ```sh
 ./build/bin/audio_testbench
 ```
 
-16 checks across four areas:
+- **Test A -- steady-state accuracy**: 1 kHz tones at several levels. The
+  engine's reported gain reduction and the actual output/input RMS ratio
+  must agree with each other and with the static curve (fast attack). With
+  a musical 5 ms attack both read less reduction than the naive peak
+  estimate -- expected, since the follower tracks the envelope, not single
+  cycles -- and must still agree with each other.
+- **Test B -- timing**: on a sine burst, attack and release reach 63 % of
+  their target within a tolerance of the configured times.
+- **Test C -- stereo modes**: with a hard-panned signal, Linked keeps the
+  silent channel silent, Dual Mono's second detector reports no reduction;
+  with loud Mid and quiet Side content, Linked preserves the L/R ratio
+  while Mid/Side leaves the quiet Side untouched and compresses the Mid.
 
-- **Test A -- steady-state gain reduction accuracy.** A 1kHz sine tone at
-  several levels, processed and measured two independent ways: the
-  engine's own reported `gainReductionDb()`, and a plain RMS ratio of the
-  actual output/input samples (never touches `gainReductionDb()` at all)
-  -- both must agree with each other and with
-  `computeGainReductionDb()` evaluated at the tone's true peak level, but
-  *only once the envelope's attack time constant is short relative to the
-  tone's own quarter-period* (Part 1, a synthetic `0.05ms` attack). A
-  second case (Part 2) deliberately uses a musical `5ms` attack against
-  the same `1kHz` tone and documents the real, expected consequence: the
-  peak follower can only partially rise within each cycle, so both
-  measurements read *less* reduction than the naive full-peak estimate --
-  and are still required to match *each other* exactly, proving the
-  real audio-rate chain is self-consistent even where it deliberately
-  doesn't track a single cycle's instantaneous peak. This is normal,
-  correct compressor behavior (a fast musical attack time responds to a
-  signal's amplitude *envelope* over tens of milliseconds, not to
-  individual audio-rate cycles) -- pinned down explicitly here rather than
-  either silently assumed away or mistaken for a bug.
-- **Test B -- attack/release timing on a real sine burst.** A quiet lead-in,
-  a loud sustained burst, a quiet tail; measures the time for gain
-  reduction to cross 63% of the way to its settled value on both the
-  attack and release edges, checked against the configured times with a
-  generous (real-audio, not closed-form-DC) tolerance.
-- **Test C -- volume compensation measures a value you can apply as output
-  gain, and stays put.** Compensation no longer touches the audio path at
-  all (see `docs/ARCHITECTURE.md`'s "Where Volume Compensation actually
-  applies") -- so this tests the real two-step workflow, not a single
-  all-in-one call: a "measure" pass (compensation enabled, Output Gain at
-  0) captures the settled `compGainDb`, then an "applied" pass feeds that
-  value in as Output Gain (compensation off, exactly what
-  `UICompressorMono`/`Stereo` do automatically the instant a measurement
-  lands). Output RMS loudness must land within 1dB of the input's, across
-  three very different thresholds. A sanity check confirms the same
-  threshold sweep *does* visibly change loudness without that second step
-  -- otherwise this test would pass vacuously. A further check feeds a
-  loud tone (letting compensation measure and hold) followed immediately
-  by a much quieter one in the same run, and confirms the *reported*
-  compensation-gain trace is bit-for-bit identical through the quiet
-  section -- it doesn't drift once Held, matching `CompensationGain`'s own
-  `dsp_regression` guarantee end to end.
-- **Test D -- the three stereo modes are actually distinct.** A hard-panned
-  signal confirms Linked keeps a silent channel exactly silent (shared
-  gain) and Dual-Mono's independent detector on that same silent channel
-  reports exactly zero reduction throughout. A second signal (loud "Mid"
-  content plus much quieter "Side" content, both proportional multiples of
-  one waveform) confirms Linked preserves the exact L/R ratio (a single
-  shared gain can't do otherwise), while Mid/Side leaves the quiet,
-  below-the-knee Side content untouched but substantially compresses the
-  loud Mid content -- the concrete, audible thing "Mid/Side narrows or
-  widens the stereo image" means, and the actual way this mode differs
-  from the other two.
+## Plugin-level tests (built by hand)
 
-## What real WAV files exist for
+These compile the real plugin class (with DPF's `Plugin` base and
+`-fno-access-control`) or the real widget code against a drawing stub;
+the exact build command is in each file's header.
 
-`tools/testbench/output/*.wav` (regenerated by every `audio_testbench`
-run): a mono attack/release burst (dry + wet), a hard-panned stereo signal
-processed through all three modes, and a "wide" (loud-center/quiet-side)
-stereo signal through Linked and Mid/Side -- listen to these directly to
-sanity-check that the numeric checks above correspond to what you'd
-actually expect to hear, not just what the assertions say.
+| Test | Checks |
+|---|---|
+| `tests/stereo_trigger_test.cpp` | Compressor Stereo: sidechain gain, filter and scope act on the internal signal with Sidechain Internal, on the key with External; `dump` prints output checksums to compare two builds bit for bit. |
+| `tests/stereo_heartbeat_test.cpp` | Compressor Stereo: the spectrum analysers run only while the editor's heartbeat arrives. |
+| `tests/contour_trigger_test.cpp` | Contour: Trigger Gain and Trigger Filter act on the internal signal. |
+| `tests/contour_mono_test.cpp` | Contour Mono: 2 in / 1 out, sidechain, bypass, lookahead; same behaviour as Contour's Linked mode. |
+| `tests/contour_widget_sim.cpp` | Contour's graph: mouse handling (selection windows, handles, links) with synthetic events. |
+| `tests/param_strip_sim.cpp` | Value fields: how far a value moves per pixel of drag, including from 0. |
+| `tests/check_ui_ctor.py` | Static check that every widget pointer of a UI class is created exactly once at the top level of its constructor. |
 
-There's no reference/target audio file in this repo to compare against
-(unlike the sibling project's `fit_gain_curve`, which learns a curve from
-example audio) -- `Wav.hpp` includes a WAV *reader* as well as a writer for
-exactly that purpose if it's ever useful later (e.g. feeding a real
-reference recording through the same harness), but nothing currently calls
-it.
+`tools/testbench/contour_preset_probe.cpp` loads a Contour preset, runs
+sine signals through the real `run()` and reports distortion, gain jumps
+and the step at the threshold; `plot_contour_probe.py` plots the results.

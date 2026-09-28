@@ -22,8 +22,8 @@
 // image count become dense enough to blur into something that resembles
 // a full, smoothly-decaying tail (image-source theory: this converges
 // toward the statistical/Sabine diffuse-field prediction as order -> infinity)
-// -- which is exactly the "hours of calculation" case the user explicitly
-// opted into, not a shortcut around it.
+// -- an offline computation that may take hours, deliberately, not a
+// shortcut around it.
 //
 // Stereo comes from two distinct receiver points (an "ear spacing" apart
 // along the room's own width axis), each hearing the same source via

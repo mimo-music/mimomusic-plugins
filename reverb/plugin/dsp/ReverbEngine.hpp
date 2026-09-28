@@ -97,25 +97,17 @@
 // input and accumulated floating-point error."
 //
 // -----------------------------------------------------------------------
-// What is deliberately NOT here yet (see docs/REVERB_CONCEPT.md "Phase 2")
+// Not in this engine
 // -----------------------------------------------------------------------
 // - Early reflections (the image-source method) live in this same file
-//   (firstOrderImageSources()) but are not yet wired into ReverbEngine's
-//   own processStereo() as a summed tap-delay line -- validated
-//   standalone (test [R5]) as a first step, integration is phase 2.
-// - No wait-free double-buffer coefficient hand-off yet (StateSpaceEngine's
-//   own pattern) -- prepare() is not real-time safe to call from the audio
-//   thread. A room-size change (which changes every line's LENGTH, i.e.
-//   the delay buffers' own indexing) has no meaningful "in between" two
-//   different lengths to interpolate through, exactly the EQ's own order-
-//   changing-edit situation -- so it should reuse StateSpaceEngine's own
-//   duck-to-silence-then-swap technique (DuckState) rather than invent a
-//   new one, once wired into a real plugin with a message-thread/audio-
-//   thread split to duck across.
-// - No parametric EQ stage (post-tank, or "object" mid-tank) -- see the
-//   concept doc's EQ integration section; this file only needs to stay an
-//   ordinary StateSpaceMatrices producer (the EQ side) plus this dedicated
-//   engine (the reverb side), nothing new for the EQ to reuse cleanly.
+//   (firstOrderImageSources()) and are validated standalone, but are not
+//   mixed into processStereo()'s output.
+// - Room-size changes go through requestRoom()/processBlock(): published
+//   atomically from any thread, applied on the audio thread inside a
+//   duck-to-silence swap (see the "Room-size changes" section below) --
+//   prepare() itself is not real-time safe.
+// - The EQ on the reverb signal is a separate StateSpaceEngine in the
+//   plugin class, after this engine; there is no EQ inside the network.
 
 #pragma once
 
@@ -336,7 +328,7 @@ struct Vec3 { double x = 0.0, y = 0.0, z = 0.0; };
 // wall absorption coefficient. This is the "specular single-bounce" half
 // of geometric acoustics -- the acoustic analogue of mirroring a light
 // source across a flat surface in a ray tracer (see docs/REVERB_CONCEPT.md's
-// "geometric acoustics" section for why this deliberately stops at first
+// "Background" section for why this deliberately stops at first
 // order rather than growing into full recursive path tracing). Source and
 // receiver are placed at fixed fractional offsets within the room so the
 // only user-facing parameters remain the room dimensions themselves.
@@ -819,7 +811,7 @@ public:
     void processStereo(double inL, double inR, double &outL, double &outR) {
         // Diffuse the incoming signal before it ever reaches the tank --
         // see AllpassDiffuser's own comment for why this is what actually
-        // fixes the reported "metallic" character, not a decay/damping
+        // fixes a metallic character, not a decay/damping
         // tweak (an allpass changes echo density/phase structure, not
         // loudness or color, so it can't be substituted for by adjusting
         // Decay Time/Damping).
@@ -912,8 +904,8 @@ private:
 
     AllpassDiffuser diffuserL_, diffuserR_;
     double diffusionAmount_ = 0.7; // a sensibly-diffused default out of the box -- see AllpassDiffuser's own comment
-    // 0.3 default, not 0 -- the direct fix for the reported "uncontrolled
-    // frequencies"/pitched-ringing symptom is worth having on by default,
+    // 0.3 default, not 0 -- the fix for uncontrolled resonant frequencies
+    // (pitched ringing) is worth having on by default,
     // not something a user has to discover; see ModulatedDelay's own
     // comment for the research this default is grounded in (gentle, well
     // under the "too much creates unwanted pitch modulation" threshold).

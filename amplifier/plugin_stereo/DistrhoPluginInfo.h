@@ -3,9 +3,8 @@
 
 // DistrhoPluginInfo.h -- MimoMusic Amplifier Stereo
 //
-// See ../plugin_mono/DistrhoPluginInfo.h's identical comments for the URI
-// TODO and the "why this now has a custom GUI" reasoning -- both apply
-// unchanged here. Own DistrhoPluginInfo.h in its own directory (not
+// See ../plugin_mono/DistrhoPluginInfo.h's comments on the URI and the
+// custom GUI -- both apply unchanged here. Own DistrhoPluginInfo.h in its own directory (not
 // plugin_mono/'s) so the two plugins' identities can never be ambiguously
 // resolved by include order, matching every sibling plugin's own
 // convention in both other projects.

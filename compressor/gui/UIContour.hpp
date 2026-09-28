@@ -164,8 +164,8 @@ private:
     // restore.
     void syncBFromA();
 
-    // "a button for sidechain options that opens another window" (direct
-    // ask, ported) -- see UICompressorStereo::refreshScPanelVisibility()'s
+    // The trigger options panel (ported) -- see
+    // UICompressorStereo::refreshScPanelVisibility()'s
     // own comment for the full in-window-overlay-not-a-second-Window
     // design this is a verbatim port of.
     void refreshScPanelVisibility();
