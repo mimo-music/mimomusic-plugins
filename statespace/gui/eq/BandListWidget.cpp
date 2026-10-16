@@ -78,8 +78,8 @@ using ssfilter::advanceChannelCrossFeed;
 
 } // namespace
 
-BandListWidget::BandListWidget(Widget* parent, ssgui::IEqEditorHost* host, bool stereo)
-    : NanoSubWidget(parent), host_(host), stereo_(stereo)
+BandListWidget::BandListWidget(NanoTopLevelWidget* parent, ssgui::IEqEditorHost* host, bool stereo)
+    : EditorSubWidget(parent), host_(host), stereo_(stereo)
 {
     loadSharedResources();
 }

@@ -38,8 +38,22 @@ const char* noteValueLabel(int index)
 } // namespace
 
 UIReverb::UIReverb()
-    : UI(1000, 760)
+    : UI(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT)
 {
+    // Scale with the host's or desktop's scale factor (Ardour's GUI
+    // scaling, else Xft.dpi; DPF_SCALE_FACTOR overrides): DPF draws
+    // everything scaled and zooms when the window is resized, keeping the
+    // aspect ratio; the layout always sees the default (logical) size. The
+    // zoom is relative to the design size (setAutoScaleBaseSize(), DPF
+    // patch dpf-patches/0002), so the window can also be made smaller than
+    // it, down to half (the contents then shrink with it). Not
+    // UI(w, h, true): DPF already creates the window at the scaled size,
+    // and that form resizes it by the scale factor a second time.
+    // Requires every widget to share this editor's NanoVG context (their
+    // constructors take a NanoTopLevelWidget*) -- a widget with its own
+    // context is drawn into an unscaled viewport.
+    getWindow().setAutoScaleBaseSize(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT);
+    setGeometryConstraints(DISTRHO_UI_DEFAULT_WIDTH / 2, DISTRHO_UI_DEFAULT_HEIGHT / 2, true, true, false);
     loadSharedResources();
     fontFace(NANOVG_DEJAVU_SANS_TTF);
 
@@ -117,6 +131,29 @@ UIReverb::UIReverb()
 
     list_ = new BandListWidget(this, this, true); // stereo -- shows the Channel column
     list_->setOnSelectionChanged([this](int i) { selectBand(i); });
+
+    bandStrip_ = new ParamStripWidget(this);
+    bandStrip_->setGetter([this](uint32_t id) -> float {
+        if (selectedBand_ < 0 || selectedBand_ >= getBandCount()) return 0.0f;
+        const ssfilter::EqBand b = getBand(selectedBand_);
+        switch (id)
+        {
+        case 0: return float(b.freqHz);
+        case 1: return float(b.gainDb);
+        case 2: return float(b.q);
+        }
+        return 0.0f;
+    });
+    bandStrip_->setSetter([this](uint32_t id, float v) {
+        if (selectedBand_ < 0 || selectedBand_ >= getBandCount()) return;
+        switch (id)
+        {
+        case 0: setBandFreq(selectedBand_, v); break;
+        case 1: setBandGain(selectedBand_, v); break;
+        case 2: setBandQ(selectedBand_, v); break;
+        }
+        repaint();
+    });
 
     tooltip_ = new TooltipOverlay(this); // LAST -- always-on-top, see its own file comment
 
@@ -299,14 +336,41 @@ void UIReverb::layout()
     graph_->setAbsolutePos(int(pad), int(by));
     graph_->setSize(uint(w - listW - pad * 3.0f), uint(h - by - pad));
 
+    // The selected band's strip under the list: heading + fields.
+    constexpr float bandHeaderH = 16.0f, bandStripH = 50.0f;
+    const float bandPanelH = bandHeaderH + bandStripH + pad;
     list_->setAbsolutePos(int(w - listW - pad), int(by));
-    list_->setSize(uint(listW), uint(h - by - pad));
+    list_->setSize(uint(listW), uint(std::max(20.0f, h - by - pad - bandPanelH)));
+    bandStripHeaderX_ = w - listW - pad;
+    bandStripHeaderY_ = h - pad - bandStripH - bandHeaderH;
+    bandStrip_->setAbsolutePos(int(bandStripHeaderX_), int(bandStripHeaderY_ + bandHeaderH));
+    bandStrip_->setSize(uint(listW), uint(bandStripH));
 }
 
 void UIReverb::onResize(const ResizeEvent& ev)
 {
     UI::onResize(ev);
     layout();
+}
+
+void UIReverb::refreshBandStrip()
+{
+    const bool valid = selectedBand_ >= 0 && selectedBand_ < getBandCount();
+    bandStrip_->setVisible(valid);
+    if (!valid || bandStrip_->isEditing()) return;
+    const ssfilter::EqBandType t = getBand(selectedBand_).type;
+    const int key = selectedBand_ * 64 + int(t);
+    if (key == bandStripKey_) return;
+    bandStripKey_ = key;
+    const bool hasGain = ssfilter::eqBandTypeHasGain(t);
+    bandStrip_->setFields({
+        { "Freq", "Hz", 20.0f, 20000.0f, 1000.0f, 1.05f, true, 0, 0,
+          "Freq: the selected band's frequency (drag, double-click to type, scroll; Alt = finer)." },
+        { hasGain ? "Gain" : "Gain (unused)", "dB", -24.0f, 24.0f, 0.0f, 0.5f, false, 1, 1,
+          hasGain ? "Gain: the selected band's boost or cut." : "Gain: not used by this band type." },
+        { "Q", "", 0.05f, 100.0f, 1.0f, 1.08f, true, 2, 2,
+          "Q: how narrow (high) or wide (low) the selected band is." },
+    });
 }
 
 void UIReverb::onNanoDisplay()
@@ -318,6 +382,23 @@ void UIReverb::onNanoDisplay()
     rect(0, 0, w, h);
     fillColor(Color(18, 19, 23));
     fill();
+
+    // Selected band's heading above its strip.
+    refreshBandStrip();
+    fontSize(11.5f);
+    textAlign(ALIGN_LEFT | ALIGN_MIDDLE);
+    if (selectedBand_ >= 0 && selectedBand_ < getBandCount())
+    {
+        char head[64];
+        std::snprintf(head, sizeof(head), "EQ band %d \xC2\xB7 %s", selectedBand_ + 1, ssfilter::eqBandTypeName(getBand(selectedBand_).type));
+        fillColor(Color(200, 204, 212));
+        text(bandStripHeaderX_ + 2.0f, bandStripHeaderY_ + 8.0f, head, nullptr);
+    }
+    else
+    {
+        fillColor(Color(120, 124, 132));
+        text(bandStripHeaderX_ + 2.0f, bandStripHeaderY_ + 8.0f, "Click an EQ band to edit it here with larger fields.", nullptr);
+    }
 
     // Diagnostic readout -- see class comment / kParamHostTempoValid's own
     // comment in PluginReverb.hpp for why this exists.
@@ -445,7 +526,7 @@ void UIReverb::stateChanged(const char* key, const char* value)
 
 bool UIReverb::onCharacterInput(const CharacterInputEvent& ev)
 {
-    ParamStripWidget* editing = roomStrip_->isEditing() ? roomStrip_ : (mainStrip_->isEditing() ? mainStrip_ : nullptr);
+    ParamStripWidget* editing = roomStrip_->isEditing() ? roomStrip_ : (mainStrip_->isEditing() ? mainStrip_ : (bandStrip_->isEditing() ? bandStrip_ : nullptr));
     if (editing == nullptr) return false;
     editing->appendChar(ev.string[0]);
     return true;
@@ -453,7 +534,7 @@ bool UIReverb::onCharacterInput(const CharacterInputEvent& ev)
 
 bool UIReverb::onKeyboard(const KeyboardEvent& ev)
 {
-    ParamStripWidget* editing = roomStrip_->isEditing() ? roomStrip_ : (mainStrip_->isEditing() ? mainStrip_ : nullptr);
+    ParamStripWidget* editing = roomStrip_->isEditing() ? roomStrip_ : (mainStrip_->isEditing() ? mainStrip_ : (bandStrip_->isEditing() ? bandStrip_ : nullptr));
 
     if (editing == nullptr)
     {
@@ -643,5 +724,15 @@ void UIReverb::pushEqModel()
 END_NAMESPACE_DISTRHO
 
 START_NAMESPACE_DISTRHO
+void UIReverb::onDisplay()
+{
+    // Replaces DPF's top-level frame, which uses a pixel ratio of 1 (blurry
+    // text when scaled) -- see EditorSubWidget.hpp.
+    NanoVG::beginFrame(getWidth(), getHeight(), DGL_NAMESPACE::editorPixelRatio(*this));
+    onNanoDisplay();
+    DGL_NAMESPACE::paintEditorChildren(*this);
+    NanoVG::endFrame();
+}
+
 UI* createUI() { return new UIReverb(); }
 END_NAMESPACE_DISTRHO

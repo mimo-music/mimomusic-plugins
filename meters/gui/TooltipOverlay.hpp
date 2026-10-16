@@ -20,16 +20,16 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <string>
 
 START_NAMESPACE_DGL
 
-class TooltipOverlay : public NanoSubWidget
+class TooltipOverlay : public EditorSubWidget
 {
 public:
-    explicit TooltipOverlay(Widget* parent);
+    explicit TooltipOverlay(NanoTopLevelWidget* parent);
 
     // anchorX/Y/W/H: the hovered control's own screen rect (absolute,
     // same coordinate space this overlay itself lives in) -- the tooltip

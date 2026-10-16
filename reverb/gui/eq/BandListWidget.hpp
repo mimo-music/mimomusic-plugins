@@ -25,7 +25,7 @@
 #pragma once
 
 #include "EqEditorHost.hpp"
-#include "NanoVG.hpp"
+#include "../EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -33,7 +33,7 @@
 
 START_NAMESPACE_DGL
 
-class BandListWidget : public NanoSubWidget
+class BandListWidget : public EditorSubWidget
 {
 public:
     // `stereo`: whether to show the Channel column at all (Both/Left
@@ -43,7 +43,7 @@ public:
     // assign Left/Right of, and IEqEditorHost::setBandChannel() is a
     // no-op there, so showing a control that would silently do nothing on
     // click would be worse than not showing it at all.
-    BandListWidget(Widget* parent, ssgui::IEqEditorHost* host, bool stereo);
+    BandListWidget(NanoTopLevelWidget* parent, ssgui::IEqEditorHost* host, bool stereo);
 
     void setSelectedBand(int index) { selectedBand_ = index; }
     int getSelectedBand() const { return selectedBand_; }

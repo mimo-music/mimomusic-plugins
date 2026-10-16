@@ -40,12 +40,13 @@ Color heatmapColor(double value, double maxAbs, double& outIntensity)
 
 } // namespace
 
-MatrixGridWidget::MatrixGridWidget(Widget* parent, ssgui::IModelEditorHost* host,
+MatrixGridWidget::MatrixGridWidget(NanoTopLevelWidget* parent, ssgui::IModelEditorHost* host,
                                     MatrixKind kind, const char* title)
-    : NanoSubWidget(parent), host_(host), kind_(kind), title_(title)
+    : EditorSubWidget(parent), host_(host), kind_(kind), title_(title)
 {
-    // Each NanoSubWidget owns its own NanoVG context, so the bundled font
-    // must be (re-)loaded here too -- loadSharedResources() is idempotent.
+    // The context is shared with the editor (see EditorSubWidget.hpp),
+    // which has usually loaded the bundled font already;
+    // loadSharedResources() is idempotent, so this only makes sure.
     loadSharedResources();
 }
 

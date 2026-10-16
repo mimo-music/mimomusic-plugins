@@ -5,6 +5,8 @@
 
 #include "DistrhoUI.hpp"
 
+#include "EditorSubWidget.hpp"
+
 #include "../plugin/dsp/CompressorDsp.hpp"
 #include "../plugin_limiter/PluginLimiter.hpp"
 #include "LevelMeterWidget.hpp"
@@ -19,18 +21,12 @@
 
 START_NAMESPACE_DISTRHO
 
-// A small, dedicated UI -- see PluginLimiter.hpp/DistrhoPluginInfo.h's file
-// comments for the full history: a reset away from UICompressorStereo's
-// widgets reused wholesale, then revised again to add Attack/Lookahead/
-// Knee after comparing against dedicated limiter plugins, then again to
-// add an Algorithm button (PluginLimiter.hpp's own LimiterAlgorithm) after
-// that same comparison found the original engine can't guarantee a hard
-// peak ceiling on fast transients. Strip fields: Input, Threshold, Attack,
-// Release, Lookahead, Knee, Ceiling, Output -- plus Bypass, Algorithm,
-// Load/Save preset, one graph (LimiterGraphWidget, not
-// CompressorGraphWidget), one pair of level meters. Still no Volume
-// Compensation, no Stereo Mode button, no Up Ratio/Ratio field (see
-// PluginLimiter.cpp's kFixedRatio for why).
+// The Limiter's editor. Top row: Load/Save, Bypass, A/B, Undo/Redo. Row 2,
+// the limiting options: Algorithm, Ratio (Classic only), Clip mode
+// (Hard/Soft), Oversampling, Boost. LimiterGraphWidget shows the capped
+// gain staging and the soft clip band; the strip below holds the numeric
+// fields. Switching the Algorithm also sets its default Clip mode
+// (defaultClipModeFor()); the Clip button changes it freely afterwards.
 class UILimiter : public UI
 {
 public:
@@ -41,6 +37,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 
@@ -54,8 +51,12 @@ private:
     void refreshBypassColors();
     void refreshBoostColors();
     void refreshAlgorithmColors();
-    void refreshStripFields(); // Attack/Knee's labels change to flag them as unused in True Peak mode, see .cpp
-    void refreshGraphCurve();  // both setCurveParams() call sites go through here now, see .cpp's own comment
+    void refreshClipModeColors();
+    void refreshOversamplingColors();
+    void refreshRatioButton(); // label/colour; disabled in True Peak (always infinity:1 there)
+    void refreshStripFields(); // labels flag fields unused by the current Algorithm/Clip mode, see .cpp
+    void refreshGraphCurve();  // recomputes the gain staging and hands it to the graph
+    void setParam(uint32_t index, float value); // paramCache_ + host, the one way the UI changes a Parameter
     void onGraphParamChanged(uint32_t index, float value);
 
     void savePresetFile(const char* path);
@@ -84,6 +85,9 @@ private:
     DGL_NAMESPACE::SimpleButton* btnBypass_ = nullptr;
     DGL_NAMESPACE::SimpleButton* btnBoost_ = nullptr;
     DGL_NAMESPACE::SimpleButton* btnAlgorithm_ = nullptr;
+    DGL_NAMESPACE::SimpleButton* btnClipMode_ = nullptr;
+    DGL_NAMESPACE::SimpleButton* btnOversampling_ = nullptr;
+    DGL_NAMESPACE::SimpleButton* btnRatio_ = nullptr;
     DGL_NAMESPACE::SimpleButton* btnLoad_ = nullptr;
     DGL_NAMESPACE::SimpleButton* btnSave_ = nullptr;
 
@@ -111,14 +115,10 @@ private:
 
     float paramCache_[kParamCount];
     bool bypassed_ = false;
-    bool boost_ = false; // mirrors kParamBoost, see PluginLimiter.hpp's own comment
+    bool boost_ = false; // mirrors kParamBoost
 
-    // Mirrors PluginLimiter's own "algorithm" State -- see
-    // PluginLimiter.hpp's own top comment for why this is a State, not a
-    // Parameter. Classic is the default so a freshly opened/older-session
-    // editor shows the right thing before the host's own stateChanged()
-    // callback (if any) arrives, same convention as this project's other
-    // State-driven UI members.
+    // Mirrors the plugin's "algorithm" State (Classic until the host says
+    // otherwise).
     LimiterAlgorithm algorithm_ = LimiterAlgorithm::Classic;
 
     enum class PendingFileOp { None, Load, Save } pendingFileOp_ = PendingFileOp::None;

@@ -57,8 +57,8 @@ std::string DynEqGraphWidget::formatFreqLabel(double freqHz)
     return std::string(buf);
 }
 
-DynEqGraphWidget::DynEqGraphWidget(Widget* parent, ssgui::IDynEqEditorHost* host)
-    : NanoSubWidget(parent), host_(host)
+DynEqGraphWidget::DynEqGraphWidget(NanoTopLevelWidget* parent, ssgui::IDynEqEditorHost* host)
+    : EditorSubWidget(parent), host_(host)
 {
     loadSharedResources();
     for (float& v : spectrumInDb_) v = SpectrumAnalyzer::kFloorDb;

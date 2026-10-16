@@ -85,21 +85,43 @@ entries stay as placeholders marked "(unused)".
 
 Bypass copies input to output but keeps feeding the meters and the scope.
 
-## Limiter (`plugin_limiter/`)
+## Limiter (`plugin_limiter/`, `LimiterDsp.hpp`)
+
+`LimiterDsp.hpp` holds the math shared by `run()` and the graph, so the
+drawn curve is computed by the code the audio runs.
 
 - A lookahead delay line holds the audio back by Lookahead; the gain is
   computed from the undelayed signal. The delay is reported to the host as
-  latency.
-- **Classic**: a `CompressorVoice` with a fixed 20:1 ratio, stereo-linked.
+  latency. Bypass runs through the delay line too, so the reported latency
+  stays true and the delay line stays current for switching back.
+- **Classic**: a `CompressorVoice`, stereo-linked, at 20:1, 100:1 or ∞:1
+  (`limiterRatioValue()`; the slope above the knee is 1/ratio, so ∞:1 is
+  flat).
 - **True Peak** (`TruePeakGainComputer`): for each incoming sample the gain
   it alone would need (threshold / level, at most 1); the gain applied to
   the delayed sample is the minimum of those values over the whole
   lookahead window (a monotonic-deque sliding minimum, O(1) amortized, no
   allocation). A drop is applied immediately, recovery is smoothed with
-  Release, so the output provably never exceeds the threshold. Attack and
-  Knee don't apply here.
-- **Ceiling**: a final hard clamp on the output sample.
-- **Boost**: adds `-threshold` to the output gain, on top of Output Gain.
+  Release, so the output provably never exceeds the threshold. Attack,
+  Knee and Ratio don't apply here; the graph draws it as ∞:1.
+- **Gain staging** (`computeLimiterStaging()`): the gain after the limiter
+  (Output Gain + Boost, Boost = `-threshold`) is capped at
+  `targetTop - threshold`, where targetTop is the Ceiling (Hard) or
+  `Ceiling - Clip Knee` (Soft). Only positive gain is removed; if even 0 dB
+  would put the Threshold above targetTop, the gain computer limits at
+  targetTop instead. So the limited peaks land on targetTop and the clip
+  stage only sees overshoot.
+- **Clip stage**: `hardClip()` (clamp) or `softClip()` (identity up to the
+  knee start, then a tanh curve that approaches the Ceiling and never
+  crosses it).
+- **Oversampling** (`TruePeakDetector`): detection runs on a 4x estimate of
+  the peak around each sample -- a 24-tap-per-phase polyphase Kaiser sinc
+  for 3 points between samples, each local grid maximum refined with a
+  parabola (a plain 4x grid misses up to 0.3 dB at 16 kHz). Its window
+  needs 12 samples ahead, so with Oversampling the audio is delayed 12
+  samples more and the latency grows accordingly.
+- `run()` dispatches to `processBlock<oversampling, softClip>()`, so a
+  disabled feature is compiled out of the loop.
 - Switching the algorithm resets both gain computers.
 
 ## Contour (`plugin_contour/`, `CurveDsp.hpp`)

@@ -57,11 +57,19 @@ template <typename T> struct Rectangle { T x{}, y{}, w{}, h{}; T getWidth() cons
 struct FakeWindow { void focus() {} };
 
 struct Widget { virtual ~Widget() = default; };
+// Widget constructors take the editor as a NanoTopLevelWidget* (shared NanoVG
+// context, see the UI constructors); in the stub any Widget will do.
+using NanoTopLevelWidget = Widget;
 
 // The NanoSubWidget surface the widgets use. Size is settable by the test.
 struct NanoSubWidget : Widget
 {
     explicit NanoSubWidget(Widget*) {}
+    void save() {}
+    void restore() {}
+    void translate(float, float) {}
+    int getAbsoluteX() const { return 0; }
+    int getAbsoluteY() const { return 0; }
     // sizing / repaint
     double w_ = 800, h_ = 600;
     unsigned getWidth() const { return unsigned(w_); }

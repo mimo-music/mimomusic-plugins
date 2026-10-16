@@ -66,7 +66,7 @@
 
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "EqEditorHost.hpp"
-#include "NanoVG.hpp"
+#include "../EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -75,10 +75,10 @@
 
 START_NAMESPACE_DGL
 
-class EqGraphWidget : public NanoSubWidget
+class EqGraphWidget : public EditorSubWidget
 {
 public:
-    EqGraphWidget(Widget* parent, ssgui::IEqEditorHost* host);
+    EqGraphWidget(NanoTopLevelWidget* parent, ssgui::IEqEditorHost* host);
 
     void setSampleRate(double sr) { sampleRate_ = sr > 0.0 ? sr : sampleRate_; }
 

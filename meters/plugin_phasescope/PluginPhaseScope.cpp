@@ -170,6 +170,12 @@ void PluginPhaseScope::initState(uint32_t index, State& state)
         state.hints = 0; // UI convenience only -- see kStateAutoGainActive's own comment
         state.defaultValue = "0";
         break;
+    case kStateCompact:
+        state.key = "compact";
+        state.label = "Compact View";
+        state.hints = 0; // UI convenience only -- see kStateCompact's own comment
+        state.defaultValue = "0";
+        break;
     }
 }
 

@@ -5,15 +5,14 @@
 
 START_NAMESPACE_DGL
 
-SimpleButton::SimpleButton(Widget* parent, const char* label)
-    : NanoSubWidget(parent),
+SimpleButton::SimpleButton(NanoTopLevelWidget* parent, const char* label)
+    : EditorSubWidget(parent),
       label_(label),
       bg_(58, 62, 70), bgHover_(78, 84, 96), fg_(230, 232, 236)
 {
-    // Each NanoSubWidget gets its own NanoVG context by default, so the
-    // bundled font has to be loaded here too, not just once on the
-    // top-level UI (loadSharedResources() is idempotent -- cheap to call
-    // per widget).
+    // The context is shared with the editor (see EditorSubWidget.hpp),
+    // which has usually loaded the bundled font already;
+    // loadSharedResources() is idempotent, so this only makes sure.
     loadSharedResources();
 }
 

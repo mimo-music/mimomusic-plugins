@@ -31,6 +31,20 @@ constexpr int kDebounceIdleTicks = 3; // same debounce window as the base plugin
 UIEq::UIEq()
     : UI(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT)
 {
+    // Scale with the host's or desktop's scale factor (Ardour's GUI
+    // scaling, else Xft.dpi; DPF_SCALE_FACTOR overrides): DPF draws
+    // everything scaled and zooms when the window is resized, keeping the
+    // aspect ratio; the layout always sees the default (logical) size. The
+    // zoom is relative to the design size (setAutoScaleBaseSize(), DPF
+    // patch dpf-patches/0002), so the window can also be made smaller than
+    // it, down to half (the contents then shrink with it). Not
+    // UI(w, h, true): DPF already creates the window at the scaled size,
+    // and that form resizes it by the scale factor a second time.
+    // Requires every widget to share this editor's NanoVG context (their
+    // constructors take a NanoTopLevelWidget*) -- a widget with its own
+    // context is drawn into an unscaled viewport.
+    getWindow().setAutoScaleBaseSize(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT);
+    setGeometryConstraints(DISTRHO_UI_DEFAULT_WIDTH / 2, DISTRHO_UI_DEFAULT_HEIGHT / 2, true, true, false);
     loadSharedResources();
     fontFace(NANOVG_DEJAVU_SANS_TTF);
 
@@ -58,6 +72,32 @@ UIEq::UIEq()
 
     list_ = new BandListWidget(this, this, true); // stereo -- shows the Channel column, see that constructor's own comment
     list_->setOnSelectionChanged([this](int i) { selectBand(i); });
+
+    bandStrip_ = new ParamStripWidget(this);
+    bandStrip_->setGetter([this](uint32_t id) -> float {
+        if (selectedBand_ < 0 || selectedBand_ >= getBandCount()) return 0.0f;
+        const ssfilter::EqBand b = getBand(selectedBand_);
+        switch (id)
+        {
+        case 0: return float(b.freqHz);
+        case 1: return float(b.gainDb);
+        case 2: return float(b.q);
+        case 3: return float(b.bandwidthOct);
+        }
+        return 0.0f;
+    });
+    bandStrip_->setSetter([this](uint32_t id, float v) {
+        if (selectedBand_ < 0 || selectedBand_ >= getBandCount()) return;
+        switch (id)
+        {
+        case 0: setBandFreq(selectedBand_, v); break;
+        case 1: setBandGain(selectedBand_, v); break;
+        case 2: setBandQ(selectedBand_, v); break;
+        case 3: setBandBandwidth(selectedBand_, v); break;
+        }
+        repaint();
+    });
+    refreshBandStrip();
 
     btnLoad_ = new SimpleButton(this, "Load...");
     btnLoad_->setCallback([this] {
@@ -91,7 +131,11 @@ UIEq::UIEq()
     });
 
     btnAddBand_ = new SimpleButton(this, "+ Band");
-    btnAddBand_->setCallback([this] { addBand(1000.0, 0.0); });
+    btnAddBand_->setCallback([this] {
+        const int before = getBandCount();
+        addBand(1000.0, 0.0);
+        if (getBandCount() > before) selectBand(getBandCount() - 1); // ready to edit in the band strip
+    });
 
     // Audition -- same idea, same button, as the sibling Dynamic EQ plugin's
     // own: preview selectedBand_'s isolated frequency region instead of
@@ -161,6 +205,7 @@ UIEq::UIEq()
     // Column hover descriptions -- one per BandListWidget column, via its
     // own cellTooltipAt().
     tooltip_->addFieldTarget(list_, [this](double x, double y) { return list_->cellTooltipAt(x, y); });
+    tooltip_->addFieldTarget(bandStrip_, [this](double x, double y) { return bandStrip_->fieldTooltipAt(x, y); });
 
     layout();
 }
@@ -268,13 +313,21 @@ void UIEq::layout()
 
     const float contentTop = toolbarH + pad * 2.0f;
     const float contentH = h - contentTop - pad;
-    const float graphH = contentH * 0.68f;
-    const float listH = contentH - graphH - pad;
+    // The selected band's strip (see refreshBandStrip()) between graph and
+    // list: a heading line, then the fields.
+    constexpr float bandHeaderH = 16.0f, bandStripH = 50.0f;
+    const float bandPanelH = bandHeaderH + bandStripH + pad;
+    const float graphH = contentH * 0.68f - bandPanelH;
+    const float listH = contentH - graphH - bandPanelH - pad;
 
     graph_->setAbsolutePos(int(pad), int(contentTop));
     graph_->setSize(uint(w - 2.0f * pad), uint(graphH));
 
-    list_->setAbsolutePos(int(pad), int(contentTop + graphH + pad));
+    bandStripHeaderY_ = contentTop + graphH + pad;
+    bandStrip_->setAbsolutePos(int(pad), int(bandStripHeaderY_ + bandHeaderH));
+    bandStrip_->setSize(uint(w - 2.0f * pad), uint(bandStripH));
+
+    list_->setAbsolutePos(int(pad), int(contentTop + graphH + bandPanelH + pad));
     list_->setSize(uint(w - 2.0f * pad), uint(listH));
 }
 
@@ -292,6 +345,24 @@ void UIEq::onNanoDisplay()
     rect(0, 0, w, float(getHeight()));
     fillColor(Color(18, 19, 23));
     fill();
+
+    // Selected band's heading above its strip (a type change from the list
+    // or graph shows up here and in the strip's "(unused)" marks).
+    refreshBandStrip();
+    fontSize(11.5f);
+    textAlign(ALIGN_LEFT | ALIGN_MIDDLE);
+    if (selectedBand_ >= 0 && selectedBand_ < getBandCount())
+    {
+        char head[64];
+        std::snprintf(head, sizeof(head), "Band %d \xC2\xB7 %s", selectedBand_ + 1, ssfilter::eqBandTypeName(getBand(selectedBand_).type));
+        fillColor(Color(200, 204, 212));
+        text(8.0f, bandStripHeaderY_ + 8.0f, head, nullptr);
+    }
+    else
+    {
+        fillColor(Color(120, 124, 132));
+        text(8.0f, bandStripHeaderY_ + 8.0f, "Click a band in the graph or the list to edit it here with larger fields.", nullptr);
+    }
 
     // "Output Trim:" label + its editable field.
     fontSize(12.0f);
@@ -1025,7 +1096,32 @@ void UIEq::selectBand(int index)
     // convention.
     if (selectedBand_ >= 0) setParameterValue(kParamAuditionBand, float(selectedBand_));
     refreshAuditionColors();
+    refreshBandStrip();
     repaint();
+}
+
+void UIEq::refreshBandStrip()
+{
+    const bool valid = selectedBand_ >= 0 && selectedBand_ < getBandCount();
+    const int type = valid ? int(getBand(selectedBand_).type) : -1;
+    bandStrip_->setVisible(valid);
+    if (!valid || (selectedBand_ == bandStripBand_ && type == bandStripType_) || bandStrip_->isEditing())
+        return;
+    bandStripBand_ = selectedBand_;
+    bandStripType_ = type;
+    const auto t = ssfilter::EqBandType(type);
+    const bool hasGain = ssfilter::eqBandTypeHasGain(t);
+    const bool hasBw = ssfilter::eqBandTypeHasBandwidth(t);
+    bandStrip_->setFields({
+        { "Freq", "Hz", 20.0f, 20000.0f, 1000.0f, 1.05f, true, 0, 0,
+          "Freq: the selected band's frequency (drag, double-click to type, scroll; Alt = finer)." },
+        { hasGain ? "Gain" : "Gain (unused)", "dB", -24.0f, 24.0f, 0.0f, 0.5f, false, 1, 1,
+          hasGain ? "Gain: the selected band's boost or cut." : "Gain: not used by this band type." },
+        { "Q", "", 0.05f, 100.0f, 1.0f, 1.08f, true, 2, 2,
+          "Q: how narrow (high) or wide (low) the selected band is." },
+        { hasBw ? "Bandwidth" : "Bandwidth (unused)", "oct", float(ssfilter::kMinBandwidthOct), float(ssfilter::kMaxBandwidthOct), 2.0f, 1.08f, true, 2, 3,
+          hasBw ? "Bandwidth: the Band Shelf's width, in octaves." : "Bandwidth: only used by the Band Shelf type." },
+    });
 }
 
 void UIEq::refreshAuditionColors()
@@ -1189,8 +1285,9 @@ void UIEq::setInlineFieldValue(EditTarget which, double v)
     repaint();
 }
 
-bool UIEq::onMotion(const MotionEvent& ev)
+bool UIEq::onMotion(const MotionEvent& rawEv)
 {
+    const MotionEvent ev = DGL_NAMESPACE::editorLogicalEvent(*this, rawEv); // own hit tests in logical units, see EditorSubWidget.hpp
     if (inlinePress_ != EditTarget::None)
     {
         const double dy = inlineDragStartY_ - ev.pos.getY(); // up = increase
@@ -1209,11 +1306,12 @@ bool UIEq::onMotion(const MotionEvent& ev)
         }
         return true;
     }
-    return UI::onMotion(ev);
+    return UI::onMotion(rawEv);
 }
 
-bool UIEq::onScroll(const ScrollEvent& ev)
+bool UIEq::onScroll(const ScrollEvent& rawEv)
 {
+    const ScrollEvent ev = DGL_NAMESPACE::editorLogicalEvent(*this, rawEv); // own hit tests in logical units, see EditorSubWidget.hpp
     const double x = ev.pos.getX(), y = ev.pos.getY();
     const bool onTrimField = x >= trimFieldX_ && x < trimFieldX_ + trimFieldW_ &&
                               y >= trimFieldY_ && y < trimFieldY_ + trimFieldH_;
@@ -1234,7 +1332,7 @@ bool UIEq::onScroll(const ScrollEvent& ev)
         }
         return true;
     }
-    return UI::onScroll(ev);
+    return UI::onScroll(rawEv);
 }
 
 void UIEq::cancelEdit()
@@ -1246,6 +1344,13 @@ void UIEq::cancelEdit()
 
 bool UIEq::onCharacterInput(const CharacterInputEvent& ev)
 {
+    if (bandStrip_->isEditing())
+    {
+        const char c = ev.string[0];
+        if (c == '\r' || c == '\n') bandStrip_->commitEdit();
+        else bandStrip_->appendChar(c);
+        return true;
+    }
     if (editTarget_ == EditTarget::None) return false;
     const char c = ev.string[0];
 
@@ -1271,6 +1376,28 @@ bool UIEq::onKeyboard(const KeyboardEvent& ev)
         const bool shift = (ev.mod & DGL_NAMESPACE::kModifierShift) != 0;
         if (ev.key == 'z' && !shift) { onUndo(); return true; }
         if (ev.key == 'y' || (ev.key == 'z' && shift)) { onRedo(); return true; }
+    }
+
+    if (bandStrip_->isEditing())
+    {
+        if (!ev.press) return true;
+        switch (ev.key)
+        {
+        case DGL_NAMESPACE::kKeyEnter:
+        case DGL_NAMESPACE::kKeyTab:
+            bandStrip_->commitEdit();
+            break;
+        case DGL_NAMESPACE::kKeyEscape:
+            bandStrip_->cancelEdit();
+            break;
+        case DGL_NAMESPACE::kKeyBackspace:
+        case DGL_NAMESPACE::kKeyDelete:
+            bandStrip_->backspace();
+            break;
+        default:
+            break;
+        }
+        return true;
     }
 
     if (editTarget_ == EditTarget::None)
@@ -1315,8 +1442,9 @@ bool UIEq::onKeyboard(const KeyboardEvent& ev)
     }
 }
 
-bool UIEq::onMouse(const MouseEvent& ev)
+bool UIEq::onMouse(const MouseEvent& rawEv)
 {
+    const MouseEvent ev = DGL_NAMESPACE::editorLogicalEvent(*this, rawEv); // own hit tests in logical units, see EditorSubWidget.hpp
     const double x = ev.pos.getX(), y = ev.pos.getY();
     const bool onTrimField = x >= trimFieldX_ && x < trimFieldX_ + trimFieldW_ &&
                               y >= trimFieldY_ && y < trimFieldY_ + trimFieldH_;
@@ -1391,7 +1519,7 @@ bool UIEq::onMouse(const MouseEvent& ev)
         }
     }
 
-    return UI::onMouse(ev);
+    return UI::onMouse(rawEv);
 }
 
 void UIEq::uiFileBrowserSelected(const char* filename)
@@ -1572,6 +1700,16 @@ void UIEq::rememberPresetDir(const char* filePath)
 
     lastPresetDir_ = dir;
     setState("presetDir", lastPresetDir_.c_str());
+}
+
+void UIEq::onDisplay()
+{
+    // Replaces DPF's top-level frame, which uses a pixel ratio of 1 (blurry
+    // text when scaled) -- see EditorSubWidget.hpp.
+    NanoVG::beginFrame(getWidth(), getHeight(), DGL_NAMESPACE::editorPixelRatio(*this));
+    onNanoDisplay();
+    DGL_NAMESPACE::paintEditorChildren(*this);
+    NanoVG::endFrame();
 }
 
 UI* createUI() { return new UIEq(); }

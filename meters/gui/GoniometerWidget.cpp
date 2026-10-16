@@ -8,8 +8,8 @@
 
 START_NAMESPACE_DGL
 
-GoniometerWidget::GoniometerWidget(Widget* parent)
-    : NanoSubWidget(parent)
+GoniometerWidget::GoniometerWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
 }

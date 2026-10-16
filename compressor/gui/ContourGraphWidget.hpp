@@ -120,7 +120,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include "../plugin/dsp/CurveDsp.hpp"
 
@@ -131,10 +131,10 @@
 
 START_NAMESPACE_DGL
 
-class ContourGraphWidget : public NanoSubWidget
+class ContourGraphWidget : public EditorSubWidget
 {
 public:
-    explicit ContourGraphWidget(Widget* parent);
+    explicit ContourGraphWidget(NanoTopLevelWidget* parent);
 
     // The full curve -- called whenever it changes from outside this
     // widget (a preset/session load, or an undo/redo) so this widget's

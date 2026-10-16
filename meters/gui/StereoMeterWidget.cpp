@@ -9,8 +9,8 @@
 
 START_NAMESPACE_DGL
 
-StereoMeterWidget::StereoMeterWidget(Widget* parent)
-    : NanoSubWidget(parent)
+StereoMeterWidget::StereoMeterWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
 }
@@ -155,7 +155,8 @@ void StereoMeterWidget::onNanoDisplay()
     constexpr float pad = 8.0f;
     constexpr float rowH = 46.0f;
     drawCorrelationBar(pad, pad, w - 2.0f * pad, rowH);
-    drawWidthBar(pad, pad + rowH + 10.0f, w - 2.0f * pad, rowH);
+    if (!correlationOnly_)
+        drawWidthBar(pad, pad + rowH + 10.0f, w - 2.0f * pad, rowH);
 
     beginPath();
     rect(0.5f, 0.5f, w - 1.0f, h - 1.0f);

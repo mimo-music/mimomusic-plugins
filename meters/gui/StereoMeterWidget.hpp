@@ -11,17 +11,20 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 START_NAMESPACE_DGL
 
-class StereoMeterWidget : public NanoSubWidget
+class StereoMeterWidget : public EditorSubWidget
 {
 public:
-    explicit StereoMeterWidget(Widget* parent);
+    explicit StereoMeterWidget(NanoTopLevelWidget* parent);
 
     void setCorrelation(float corr, float minHold);
     void setWidthPercent(float widthPercent);
+    // Only the Correlation row (the Phase Scope's compact view); the widget
+    // then needs about 60 px of height instead of 120.
+    void setCorrelationOnly(bool only) { correlationOnly_ = only; repaint(); }
 
 protected:
     void onNanoDisplay() override;
@@ -33,6 +36,7 @@ private:
     float correlation_ = 0.0f;
     float correlationMinHold_ = 1.0f;
     float widthPercent_ = 0.0f;
+    bool correlationOnly_ = false;
 };
 
 END_NAMESPACE_DGL

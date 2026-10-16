@@ -1,0 +1,94 @@
+diff --git a/dgl/src/Window.cpp b/dgl/src/Window.cpp
+index 6f7562e2..43156513 100644
+--- a/dgl/src/Window.cpp
++++ b/dgl/src/Window.cpp
+@@ -321,6 +321,12 @@ void Window::setSize(uint width, uint height)
+     {
+         puglSetSizeAndDefault(pData->view, width, height);
+ 
++        // MimoMusic patch (dpf-patches/0001): an embedded window resized by its own UI -- let the
++        // UI tell the host (LV2: ui:resize; a no-op for the other non-size-request formats)
++        if (pData->isEmbed && ! pData->topLevelWidgets.empty())
++            if (TopLevelWidget* const topLevelWidget = pData->topLevelWidgets.front())
++                topLevelWidget->requestSizeChange(width, height);
++
+         // there are no resize events for closed windows, so short-circuit the top-level widgets here
+         if (pData->isClosed)
+         {
+diff --git a/distrho/src/DistrhoUI.cpp b/distrho/src/DistrhoUI.cpp
+index 0241b59c..2edade98 100644
+--- a/distrho/src/DistrhoUI.cpp
++++ b/distrho/src/DistrhoUI.cpp
+@@ -579,7 +579,9 @@ void UI::onResize(const ResizeEvent& ev)
+ {
+     UIWidget::onResize(ev);
+ 
+-   #if ! DISTRHO_UI_USES_SIZE_REQUEST
++    // MimoMusic patch (dpf-patches/0001): not for LV2, where the size callback means ui:resize
++    // -- reporting every resize (including the host's own) would pin the host's minimum size.
++   #if ! DISTRHO_UI_USES_SIZE_REQUEST && ! defined(DISTRHO_PLUGIN_TARGET_LV2)
+     if (uiData->initializing)
+         return;
+ 
+@@ -597,6 +599,10 @@ void UI::requestSizeChange(const uint width, const uint height)
+         uiData->window->setSizeFromHost(width, height);
+     else
+         uiData->setSizeCallback(width, height);
++   #elif defined(DISTRHO_PLUGIN_TARGET_LV2)
++    // MimoMusic patch (dpf-patches/0001): a size the UI set itself -> LV2 ui:resize
++    if (! uiData->initializing)
++        uiData->setSizeCallback(width, height);
+    #else
+     // unused
+     (void)width;
+diff --git a/distrho/src/DistrhoUILV2.cpp b/distrho/src/DistrhoUILV2.cpp
+index 7f5e414c..0d106d69 100644
+--- a/distrho/src/DistrhoUILV2.cpp
++++ b/distrho/src/DistrhoUILV2.cpp
+@@ -49,9 +49,6 @@ static constexpr const setStateFunc setStateCallback = nullptr;
+ static constexpr const sendNoteFunc sendNoteCallback = nullptr;
+ #endif
+ 
+-// unwanted in LV2, resize extension is deprecated and hosts can do it without extensions
+-static constexpr const setSizeFunc setSizeCallback = nullptr;
+-
+ // --------------------------------------------------------------------------------------------------------------------
+ 
+ template <class LV2F>
+@@ -89,6 +86,7 @@ public:
+           fUiPortMap(getLv2Feature<LV2UI_Port_Map>(features, LV2_UI__portMap)),
+           fUiRequestValue(getLv2Feature<LV2UI_Request_Value>(features, LV2_UI__requestValue)),
+           fUiTouch(getLv2Feature<LV2UI_Touch>(features, LV2_UI__touch)),
++          fUiResize(getLv2Feature<LV2UI_Resize>(features, LV2_UI__resize)),
+           fController(controller),
+           fWriteFunction(writeFunc),
+           fURIDs(uridMap),
+@@ -302,6 +300,7 @@ private:
+     const LV2UI_Port_Map*      const fUiPortMap;
+     const LV2UI_Request_Value* const fUiRequestValue;
+     const LV2UI_Touch*         const fUiTouch;
++    const LV2UI_Resize*        const fUiResize;
+ 
+     // LV2 UI stuff
+     const LV2UI_Controller     fController;
+@@ -459,6 +458,20 @@ private:
+     }
+    #endif
+ 
++    // MimoMusic patch (dpf-patches/0001): when the UI resizes itself (UI::requestSizeChange()),
++    // ask the host to resize its container too -- suil's X11-in-Gtk wrapper (Ardour) only
++    // follows ui:resize, never a plugin window that changes size on its own.
++    void setSize(const uint width, const uint height)
++    {
++        if (fUiResize != nullptr && fUiResize->ui_resize != nullptr)
++            fUiResize->ui_resize(fUiResize->handle, static_cast<int>(width), static_cast<int>(height));
++    }
++
++    static void setSizeCallback(void* const ptr, const uint width, const uint height)
++    {
++        static_cast<UiLv2*>(ptr)->setSize(width, height);
++    }
++
+     bool fileRequest(const char* const key)
+     {
+         d_stdout("UI file request %s %p", key, fUiRequestValue);

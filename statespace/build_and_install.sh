@@ -105,6 +105,11 @@ if [ "$DO_CLEAN" -eq 1 ]; then
     rm -rf "$BUILD_DIR"
 fi
 
+# DPF patches (dpf-patches/, see dpf_patches.sh there): applied for the
+# build, reverted again on exit (also on failure), so dpf/ stays upstream.
+"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" apply "$SCRIPT_DIR/dpf" "$BUILD_DIR"
+trap '"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" revert "$SCRIPT_DIR/dpf" "$BUILD_DIR"' EXIT
+
 echo "-- Configuring (cmake, Release) --"
 if ! cmake -B "$BUILD_DIR" -S "$SCRIPT_DIR" -DCMAKE_BUILD_TYPE=Release; then
     echo

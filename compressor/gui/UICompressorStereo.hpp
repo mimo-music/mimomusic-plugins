@@ -5,6 +5,8 @@
 
 #include "DistrhoUI.hpp"
 
+#include "EditorSubWidget.hpp"
+
 #include "../plugin/dsp/CompressorDsp.hpp"
 #include "../plugin_stereo/PluginCompressorStereo.hpp"
 #include "CompressorGraphWidget.hpp"
@@ -30,6 +32,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 

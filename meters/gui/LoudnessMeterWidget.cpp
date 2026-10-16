@@ -57,8 +57,8 @@ float pickGridStep(float span, const float* candidates, int candidateCount, int 
 }
 } // namespace
 
-LoudnessMeterWidget::LoudnessMeterWidget(Widget* parent)
-    : NanoSubWidget(parent)
+LoudnessMeterWidget::LoudnessMeterWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
     // Sized once, up front, to the full 6-hour capacity -- same zero-init

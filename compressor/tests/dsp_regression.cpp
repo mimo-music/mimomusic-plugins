@@ -16,6 +16,7 @@
 
 #include "CompressorDsp.hpp"
 #include "CurveDsp.hpp"
+#include "LimiterDsp.hpp"
 #include "TruePeakLimiterDsp.hpp"
 
 #include <cmath>
@@ -1367,6 +1368,113 @@ int main()
         }
         printf("[45] Snap to Diagonal: immediate snap, live drag stays pinned, endpoints pin to their own corner, still linkable "
                "(link carries it, its own Y stays on its own X), Parameter-packing and string round-trips, old data loads unsnapped: %s\n",
+               ok ? "OK" : "FAIL");
+        if (!ok) ++failures;
+    }
+
+    // [46] the Limiter's gain staging (computeLimiterStaging()): Output Gain +
+    // Boost is capped so Threshold + gain lands on the Ceiling (Hard) or the
+    // soft clip's knee start (Soft); a Ceiling below the Threshold lowers
+    // the limiting point instead of turning the signal down; a negative
+    // Output Gain is never touched.
+    {
+        bool ok = true;
+        auto is = [&](const LimiterStaging& st, double effThr, double post, double req) {
+            ok = ok && nearlyEqual(st.effectiveThresholdDb, effThr, 1e-9) && nearlyEqual(st.postGainDb, post, 1e-9) &&
+                       nearlyEqual(st.requestedPostGainDb, req, 1e-9);
+        };
+        is(computeLimiterStaging(-6.0, -1.0, 0.0, true, false, 1.0), -6.0, 5.0, 6.0);    // Boost capped at Ceiling - Threshold
+        is(computeLimiterStaging(-6.0, -1.0, 0.0, true, true, 1.0), -6.0, 4.0, 6.0);     // Soft: capped at the knee start
+        is(computeLimiterStaging(-6.0, 0.0, 10.0, false, false, 1.0), -6.0, 6.0, 10.0);  // Output Gain capped too
+        is(computeLimiterStaging(-6.0, 0.0, 3.0, false, false, 1.0), -6.0, 3.0, 3.0);    // under the cap: unchanged
+        is(computeLimiterStaging(-6.0, 0.0, -4.0, true, false, 1.0), -6.0, 2.0, 2.0);    // Boost +6, Output -4: fits
+        is(computeLimiterStaging(-6.0, 0.0, -4.0, false, false, 1.0), -6.0, -4.0, -4.0); // negative gain never touched
+        is(computeLimiterStaging(-3.0, -6.0, 0.0, false, false, 1.0), -6.0, 0.0, 0.0);   // Ceiling below Threshold: limit at Ceiling
+        is(computeLimiterStaging(-3.0, -6.0, 0.0, true, false, 1.0), -6.0, 0.0, 3.0);    // ... and Boost has no room
+        is(computeLimiterStaging(-3.0, -6.0, -5.0, false, false, 1.0), -3.0, -5.0, -5.0); // -3 - 5 = -8 already under -6
+        // In every case: effective threshold + gain after it never exceeds the target top.
+        for (double thr = -30.0; thr <= 0.0; thr += 1.5)
+            for (double ceil = -12.0; ceil <= 0.0; ceil += 1.0)
+                for (double og = -12.0; og <= 12.0; og += 2.0)
+                    for (int flags = 0; flags < 4; ++flags)
+                    {
+                        const LimiterStaging st = computeLimiterStaging(thr, ceil, og, flags & 1, flags & 2, 2.0);
+                        ok = ok && st.effectiveThresholdDb + st.postGainDb <= st.targetTopDb + 1e-9 &&
+                                   st.postGainDb <= st.requestedPostGainDb + 1e-9 && st.effectiveThresholdDb <= thr + 1e-9;
+                    }
+        printf("[46] Limiter gain staging: Boost/Output capped at the Ceiling (or soft knee start), Ceiling below "
+               "Threshold lowers the limiting point, never above the target over a full sweep: %s\n", ok ? "OK" : "FAIL");
+        if (!ok) ++failures;
+    }
+
+    // [47] softClip(): untouched up to the knee start, continuous with slope
+    // 1 there, monotonic, odd, never over the ceiling; hardClip() clamps.
+    {
+        bool ok = true;
+        const double c = dbToLinear(-1.0), k = dbToLinear(-2.0);
+        ok = ok && softClip(0.5 * k, k, c) == 0.5 * k && softClip(k, k, c) == k;
+        const double eps = 1e-7;
+        ok = ok && nearlyEqual((softClip(k + eps, k, c) - k) / eps, 1.0, 1e-5); // slope 1 at the knee start
+        double prev = 0.0;
+        for (double x = 0.0; x <= 100.0; x += 0.001)
+        {
+            const double y = softClip(x, k, c);
+            ok = ok && y >= prev && y <= c && nearlyEqual(softClip(-x, k, c), -y, 1e-15);
+            prev = y;
+        }
+        ok = ok && softClip(2.0 * c, k, c) > k && softClip(2.0 * c, k, c) < c;
+        ok = ok && hardClip(5.0, c) == c && hardClip(-5.0, c) == -c && hardClip(0.3, c) == 0.3;
+        ok = ok && softClip(5.0, c, c) == c; // no room (knee start == ceiling): falls back to hard
+        printf("[47] softClip(): identity to the knee start, slope 1 there, monotonic, odd, never above the ceiling: %s\n",
+               ok ? "OK" : "FAIL");
+        if (!ok) ++failures;
+    }
+
+    // [48] TruePeakDetector: on sines of every frequency up to 22.5 kHz
+    // (48 kHz) and many phases, the 4x + parabola estimate of the true peak
+    // (1.0) is within 0.05 dB; well inside the band within 0.02 dB.
+    {
+        constexpr double sr = 48000.0;
+        double worstLow = 0.0, worstHigh = 0.0;
+        for (double f = 250.0; f <= 22500.0; f += 125.0)
+            for (int ph = 0; ph < 24; ++ph)
+            {
+                TruePeakDetector d;
+                double m = 0.0;
+                for (int i = 0; i < 2000; ++i)
+                {
+                    const double lv = d.process(std::sin(2.0 * M_PI * f * i / sr + ph * 0.131));
+                    if (i > 200) m = std::max(m, lv);
+                }
+                const double errDb = std::fabs(linearToDb(m));
+                if (f <= 20000.0) worstLow = std::max(worstLow, errDb); else worstHigh = std::max(worstHigh, errDb);
+            }
+        const bool ok = worstLow < 0.02 && worstHigh < 0.05;
+        printf("[48] TruePeakDetector reads sine peaks to %.3f dB up to 20 kHz, %.3f dB up to 22.5 kHz (want <0.02/<0.05): %s\n",
+               worstLow, worstHigh, ok ? "OK" : "FAIL");
+        if (!ok) ++failures;
+    }
+
+    // [49] the Limiter's Classic ratio choices: infinity:1 is exactly flat above
+    // the knee (and still continuous through it), 20:1 and 100:1 are the
+    // straight ratio lines.
+    {
+        bool ok = limiterRatioValue(0) == 20.0 && limiterRatioValue(1) == 100.0 && std::isinf(limiterRatioValue(2));
+        const double thr = -10.0, knee = 2.0, inf = limiterRatioValue(2);
+        for (double lv = -9.0 + 0.0; lv <= 20.0; lv += 0.5)
+            ok = ok && nearlyEqual(lv + computeGainReductionDb(lv, thr, inf, 1.0, knee), thr, 1e-12);
+        ok = ok && nearlyEqual(12.0 + computeGainReductionDb(12.0, thr, 20.0, 1.0, 0.0), thr + 22.0 / 20.0, 1e-12) &&
+                   nearlyEqual(12.0 + computeGainReductionDb(12.0, thr, 100.0, 1.0, 0.0), thr + 22.0 / 100.0, 1e-12);
+        double prev = -1e9, worstJump = 0.0;
+        for (double lv = -14.0; lv <= -6.0; lv += 0.001) // through the knee
+        {
+            const double out = lv + computeGainReductionDb(lv, thr, inf, 1.0, knee);
+            ok = ok && std::isfinite(out) && out >= prev - 1e-12;
+            if (prev > -1e8) worstJump = std::max(worstJump, std::fabs(out - prev));
+            prev = out;
+        }
+        ok = ok && worstJump < 0.002;
+        printf("[49] Limiter ratio: infinity:1 flat above the knee, continuous and monotonic through it; 20:1/100:1 lines: %s\n",
                ok ? "OK" : "FAIL");
         if (!ok) ++failures;
     }

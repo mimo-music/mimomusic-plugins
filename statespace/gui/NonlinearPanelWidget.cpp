@@ -18,11 +18,12 @@ namespace {
 constexpr const char* kFieldLabels[5] = { "Attack ms", "Release ms", "Threshold dB", "Ratio :1", "Makeup dB" };
 }
 
-NonlinearPanelWidget::NonlinearPanelWidget(Widget* parent, ssgui::IModelEditorHost* host)
-    : NanoSubWidget(parent), host_(host)
+NonlinearPanelWidget::NonlinearPanelWidget(NanoTopLevelWidget* parent, ssgui::IModelEditorHost* host)
+    : EditorSubWidget(parent), host_(host)
 {
-    // Each NanoSubWidget owns its own NanoVG context, so the bundled font
-    // must be (re-)loaded here too -- loadSharedResources() is idempotent.
+    // The context is shared with the editor (see EditorSubWidget.hpp),
+    // which has usually loaded the bundled font already;
+    // loadSharedResources() is idempotent, so this only makes sure.
     loadSharedResources();
 }
 

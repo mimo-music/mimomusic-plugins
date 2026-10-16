@@ -80,6 +80,16 @@ bundle (`<name>.lv2`), a VST3 bundle (`<name>.vst3`) and a standalone
 JACK program. On macOS use `./build_and_install_macos.sh`, which also
 builds AU components.
 
+### DPF patches
+
+`dpf/` is the official DPF, unchanged. `dpf-patches/` holds two small
+patches the build scripts apply before building and revert afterwards
+(`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
+(`ui:resize`) when they resize themselves, and automatic scaling can be
+relative to a design size, so editors can be made smaller than it. A plain
+`cmake` build without the scripts needs them applied first:
+`dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
+
 ## Testing
 
 `dsp_regression` (built with the plugins, no GUI needed) checks the gain

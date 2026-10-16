@@ -34,6 +34,8 @@
 
 #include "DistrhoUI.hpp"
 
+#include "EditorSubWidget.hpp"
+
 #include "../plugin/dsp/AmplifierDsp.hpp"
 #include "../plugin_mono/PluginAmplifierMono.hpp" // for ParameterIndex/kParamCount
 #include "ParamStripWidget.hpp"
@@ -53,6 +55,7 @@ protected:
     void parameterChanged(uint32_t index, float value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 

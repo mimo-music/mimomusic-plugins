@@ -8,8 +8,8 @@
 
 START_NAMESPACE_DGL
 
-LevelMeterWidget::LevelMeterWidget(Widget* parent, const char* title, int channelCount)
-    : NanoSubWidget(parent), title_(title), channelCount_(channelCount)
+LevelMeterWidget::LevelMeterWidget(NanoTopLevelWidget* parent, const char* title, int channelCount)
+    : EditorSubWidget(parent), title_(title), channelCount_(channelCount)
 {
     loadSharedResources();
 }
@@ -19,7 +19,10 @@ void LevelMeterWidget::setChannel(int channel, float rmsDb, float peakDb)
     if (channel < 0 || channel > 1) return;
     rmsDb_[channel] = rmsDb;
     peakDb_[channel] = peakDb;
-    if (peakDb >= -0.05f)
+    // Over 0 dBFS only: full scale itself is a legitimate level, and a
+    // limiter's ceiling just below it (e.g. -0.02 dB) must not light it.
+    // Same rule as the Amplifier's ClipHold (|x| > 1.0).
+    if (peakDb > 0.0f)
         clipUntil_[channel] = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
     repaint();
 }

@@ -6,39 +6,37 @@
 #include "DistrhoPlugin.hpp"
 
 #include "../plugin/dsp/CompressorDsp.hpp"
+#include "../plugin/dsp/LimiterDsp.hpp"
 #include "../plugin/dsp/TruePeakLimiterDsp.hpp"
 
 #include <vector>
 
 START_NAMESPACE_DISTRHO
 
-// Which gain-computer run() actually uses -- a State (like the Stereo
-// compressor's own kStateStereoMode), not a Parameter: a structural
-// choice between two different DSP engines, not a continuous control, the
-// same convention this project already uses for StereoMode. See
-// plugin/dsp/TruePeakLimiterDsp.hpp's file comment for the full story of
-// why a second algorithm exists at all -- an empirical A/B against LSP's
-// own installed Limiter found ours (an envelope-follower-driven curve)
-// can't guarantee a hard peak ceiling on fast transients no matter how
-// steep its ratio, while a genuine lookahead peak-hold computer can, by
-// construction. Classic is unchanged and stays the default -- this is a
-// second, additive path, not a replacement.
+// A State, not a Parameter -- a structural choice between two gain
+// computers, not a continuous control. See TruePeakLimiterDsp.hpp for why
+// there are two (an envelope follower can't guarantee a hard peak limit).
 enum class LimiterAlgorithm { Classic = 0, TruePeak = 1 };
 inline LimiterAlgorithm clampLimiterAlgorithm(int raw)
 {
     return raw == 1 ? LimiterAlgorithm::TruePeak : LimiterAlgorithm::Classic;
 }
 
-// See DistrhoPluginInfo.h's own comment for the full history (a first
-// "reset from scratch" pass, then this revision after comparing against
-// dedicated limiter plugins like LSP's). The control set now: Threshold,
-// Attack, Release, Lookahead, Knee, Ceiling, Input/Output Gain, Bypass.
-// Ratio is still fixed internally (see PluginLimiter.cpp's kFixedRatio) --
-// no dedicated limiter plugin surveyed exposes it either, since a limiter
-// is inherently near-brick-wall rather than a tunable-ratio compressor --
-// and stereo detection is always Linked, for the same reason as before
-// (an independent per-channel or Mid/Side limiter on a stereo bus would
-// move the image).
+// The output stage after the gain computer and the post gain -- see
+// LimiterDsp.hpp's hardClip()/softClip().
+enum class ClipMode { Hard = 0, Soft = 1 };
+
+// The default Clip mode for an Algorithm, applied by the UI when the
+// Algorithm is switched (the user can change it afterwards): True Peak
+// never overshoots, so a Hard ceiling is exact and adds nothing; Classic's
+// finite attack lets transients overshoot, which a Soft clip rounds off.
+inline ClipMode defaultClipModeFor(LimiterAlgorithm a)
+{
+    return a == LimiterAlgorithm::TruePeak ? ClipMode::Hard : ClipMode::Soft;
+}
+
+// Indices are never reordered or reused -- new parameters are appended --
+// so saved sessions and automation keep mapping to the right control.
 enum ParameterIndex
 {
     kParamInputGain = 0,
@@ -62,21 +60,17 @@ enum ParameterIndex
     kParamMeterDetector,
     kParamMeterGainReduction,
 
-    // Boost, as found on some limiters: the reduced gain is added back at
-    // the output. Surveyed how dedicated limiter plugins actually
-    // implement this before building it, and the consistent answer (LSP's Limiter
-    // Stereo/Mono, whose own manual is quoted verbatim below; FabFilter
-    // Pro-L 2's "Unity Gain"; Slate FG-X's "Constant Gain") is a STATIC
-    // offset computed from a knob value, not a live per-sample tracker of
-    // the gain-reduction meter: "Boost - applies corresponding to the
-    // Threshold gain to the output signal" (LSP Limiter Stereo manual).
-    // Implemented the same way here: toggling this ON adds `-thresholdDb_`
-    // to the effective output gain (run()'s own outGainLin), ADDITIVELY on
-    // top of kParamOutputGain rather than replacing it, so Output Gain
-    // still works as a fine-trim either way. Appended after the meter
-    // bank, not inserted earlier -- this enum's own index-stability
-    // convention (every sibling plugin in this project follows it).
+    // Adds -Threshold after the limiter (LSP's Limiter: "applies
+    // corresponding to the Threshold gain to the output signal"), on top
+    // of Output Gain. The sum is capped so the limited peaks don't go over
+    // the Ceiling -- see computeLimiterStaging().
     kParamBoost,
+
+    kParamClipMode,     // ClipMode: 0 = Hard, 1 = Soft
+    kParamClipKnee,     // dB below the Ceiling where Soft clipping starts
+    kParamOversampling, // 0 = off, 1 = 4x oversampled peak detection (adds TruePeakDetector::kDelay samples of latency)
+    kParamMeterClip,    // output: how much the clip stage took off the loudest sample of the last block (dB, <= 0)
+    kParamRatio,        // Classic's ratio: 0 = 20:1, 1 = 100:1, 2 = infinity:1 (limiterRatioValue()); True Peak ignores it
 
     kParamCount
 };
@@ -94,7 +88,7 @@ public:
     PluginLimiter();
 
 protected:
-    uint32_t getVersion() const override { return d_version(3, 1, 0); } // 3.0: Attack/Knee exposed, real Lookahead added. 3.1: Boost button added
+    uint32_t getVersion() const override { return d_version(4, 0, 0); } // 4.0: capped Boost/Output, Clip mode, Ratio, Oversampling
 
     void initAudioPort(bool input, uint32_t index, AudioPort& port) override;
     void initParameter(uint32_t index, Parameter& parameter) override;
@@ -110,32 +104,43 @@ protected:
     void sampleRateChanged(double newSampleRate) override;
 
 private:
-    void updateLookahead(); // recomputes delaySamples_ from lookaheadMs_/sample rate, resizes the delay buffers, calls setLatency()
+    void updateLookahead(); // recomputes delaySamples_/latency from lookaheadMs_, the sample rate and oversampling_
 
-    sscomp::CompressorVoice voice_; // one shared (Linked) detector, see file comment -- the Classic algorithm's own gain computer
-    sscomp::TruePeakGainComputer truePeak_; // the alternate algorithm's own gain computer, see PluginLimiter.hpp's own top comment
+    // The per-sample loop, compiled once per combination so a disabled
+    // feature costs nothing (Oversampling off: no detector work at all).
+    template <bool kOversample, bool kSoftClip>
+    void processBlock(const float* inL, const float* inR, float* outL, float* outR, uint32_t frames);
+
+    sscomp::CompressorVoice voice_;          // Classic's gain computer
+    sscomp::TruePeakGainComputer truePeak_;  // True Peak's gain computer
+    sscomp::TruePeakDetector tpDetL_, tpDetR_; // Oversampling's peak detectors
     sscomp::LoudnessMeter loudnessInL_, loudnessInR_, loudnessOutL_, loudnessOutR_;
     sscomp::PeakMeter peakInL_, peakInR_, peakOutL_, peakOutR_;
 
     LimiterAlgorithm algorithm_ = LimiterAlgorithm::Classic;
 
     double inputGainDb_ = 0.0;
-    double thresholdDb_ = -6.0;   // limiters conventionally sit close to 0dBFS, unlike a compressor's typical -18dB
+    double thresholdDb_ = -6.0;
     double attackMs_ = 1.0;
     double releaseMs_ = 100.0;
-    double lookaheadMs_ = 5.0;    // see kParamLookahead's own comment in the ParameterIndex enum above
+    double lookaheadMs_ = 5.0;
     double kneeDb_ = 1.0;
-    double ceilingDb_ = 0.0;      // hard output ceiling, see run()'s own comment
+    double ceilingDb_ = 0.0;
     double outputGainDb_ = 0.0;
     bool bypass_ = false;
-    bool boost_ = false; // see kParamBoost's own comment
+    bool boost_ = false;
+    ClipMode clipMode_ = ClipMode::Soft; // defaultClipModeFor(Classic), the default Algorithm
+    double clipKneeDb_ = 1.0;
+    bool oversampling_ = false;
+    int ratioIndex_ = 0; // 20:1
 
-    // Look-ahead delay line: sized once for the maximum lookaheadMs_ the
-    // parameter range allows, at whatever the current sample rate is (see
-    // updateLookahead()), so a live lookahead change only needs a cheap
-    // reposition, not a reallocation. delaySamples_ is how many samples
-    // *of that buffer* the currently-configured lookaheadMs_ actually asks
-    // for -- always <= the buffer's own capacity.
+    // Per-block values for processBlock(), set at the top of run().
+    double effThresholdLin_ = 0.5, postGainLin_ = 1.0, ceilingLin_ = 1.0, clipKneeLin_ = 1.0;
+
+    // Look-ahead delay line, sized once per sample rate for the maximum
+    // lookahead plus the oversampling detector's delay. delaySamples_ is
+    // the lookahead window in samples; the audio is read
+    // delaySamples_ (+ TruePeakDetector::kDelay with Oversampling) back.
     static constexpr double kMaxLookaheadMs = 20.0;
     std::vector<float> delayBufL_, delayBufR_;
     size_t delayPos_ = 0;
@@ -147,6 +152,7 @@ private:
     float meterOutputRmsR_ = -120.0f, meterOutputPeakR_ = -120.0f;
     float meterDetector_ = -120.0f;
     float meterGainReduction_ = 0.0f;
+    float meterClip_ = 0.0f;
 
     DISTRHO_DECLARE_NON_COPYABLE(PluginLimiter)
 };

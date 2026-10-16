@@ -34,7 +34,7 @@
 
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "DynEqEditorHost.hpp"
-#include "NanoVG.hpp"
+#include "../EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -42,10 +42,10 @@
 
 START_NAMESPACE_DGL
 
-class DynEqGraphWidget : public NanoSubWidget
+class DynEqGraphWidget : public EditorSubWidget
 {
 public:
-    DynEqGraphWidget(Widget* parent, ssgui::IDynEqEditorHost* host);
+    DynEqGraphWidget(NanoTopLevelWidget* parent, ssgui::IDynEqEditorHost* host);
 
     void setSampleRate(double sr) { sampleRate_ = sr > 0.0 ? sr : sampleRate_; }
 

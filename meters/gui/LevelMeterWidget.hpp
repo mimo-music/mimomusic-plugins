@@ -8,7 +8,7 @@
 // smoothed RMS-ish fill (green -> amber -> red, via a NanoVG gradient
 // clipped to the current level) plus a thin peak-hold line, and a clip LED
 // above the bar that latches red for a short, visible moment whenever that
-// bar's true peak reaches 0dBFS -- "a bargraph with the level to see if
+// bar's peak goes over 0dBFS -- "a bargraph with the level to see if
 // it's clipping". Values arrive from the DSP side's own PeakMeter/
 // LoudnessMeter (see plugin/dsp/CompressorDsp.hpp) via DPF output
 // Parameters, read once per uiIdle() tick by the owning UI and pushed in
@@ -16,17 +16,17 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <chrono>
 #include <string>
 
 START_NAMESPACE_DGL
 
-class LevelMeterWidget : public NanoSubWidget
+class LevelMeterWidget : public EditorSubWidget
 {
 public:
-    LevelMeterWidget(Widget* parent, const char* title, int channelCount);
+    LevelMeterWidget(NanoTopLevelWidget* parent, const char* title, int channelCount);
 
     // channel: 0 = mono/left/mid, 1 = right/side (only if channelCount==2).
     // rmsDb/peakDb: -120..+12 or so, whatever the meter's own floor is.

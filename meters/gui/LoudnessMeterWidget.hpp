@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <chrono>
 #include <string>
@@ -27,10 +27,10 @@
 
 START_NAMESPACE_DGL
 
-class LoudnessMeterWidget : public NanoSubWidget
+class LoudnessMeterWidget : public EditorSubWidget
 {
 public:
-    explicit LoudnessMeterWidget(Widget* parent);
+    explicit LoudnessMeterWidget(NanoTopLevelWidget* parent);
 
     // The nine live numeric readings -- called every time any one of them
     // changes; cheap enough (nine floats) to just always pass the whole

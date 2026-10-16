@@ -63,7 +63,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -73,10 +73,10 @@
 
 START_NAMESPACE_DGL
 
-class CompressorGraphWidget : public NanoSubWidget
+class CompressorGraphWidget : public EditorSubWidget
 {
 public:
-    explicit CompressorGraphWidget(Widget* parent);
+    explicit CompressorGraphWidget(NanoTopLevelWidget* parent);
 
     // The static curve shape -- called whenever any of these parameters
     // change. `ratioUpMode`: false compresses above the threshold (Down,

@@ -7,8 +7,8 @@
 
 START_NAMESPACE_DGL
 
-TooltipOverlay::TooltipOverlay(Widget* parent)
-    : NanoSubWidget(parent)
+TooltipOverlay::TooltipOverlay(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
 }

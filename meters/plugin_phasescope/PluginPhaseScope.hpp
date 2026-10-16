@@ -111,6 +111,11 @@ enum StateIndex
     // whatever it last settled on. A lasting UI choice worth a host remembering across a
     // session, the same reasoning kStateHeatmapEnabled already uses.
     kStateAutoGainActive = 5,
+    // Compact view: the editor shrinks to the goniometer plus a correlation
+    // bar, with its controls hidden until the mouse moves over it -- so it
+    // can stay open next to other windows. A lasting UI choice, restored
+    // with the session like the other display States.
+    kStateCompact = 6,
     kStateCount
 };
 

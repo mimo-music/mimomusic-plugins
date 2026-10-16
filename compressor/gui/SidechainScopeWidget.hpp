@@ -47,7 +47,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include "../plugin/dsp/SpectrumAnalyzer.hpp"
 
@@ -56,10 +56,10 @@
 
 START_NAMESPACE_DGL
 
-class SidechainScopeWidget : public NanoSubWidget
+class SidechainScopeWidget : public EditorSubWidget
 {
 public:
-    explicit SidechainScopeWidget(Widget* parent);
+    explicit SidechainScopeWidget(NanoTopLevelWidget* parent);
 
     // One packed-triple Parameter's worth of the spectrum -- called once
     // per received kParamMeterScSpectrumBase/InBase+N Parameter (128

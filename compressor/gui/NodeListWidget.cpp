@@ -30,8 +30,8 @@ const char* dirLabel(PointDirection d)
 constexpr double kHandleYLimitDb = TransferCurve::kMaxDb - TransferCurve::kMinDb;
 }
 
-NodeListWidget::NodeListWidget(Widget* parent)
-    : NanoSubWidget(parent)
+NodeListWidget::NodeListWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
 }

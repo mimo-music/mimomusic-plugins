@@ -37,7 +37,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -46,10 +46,10 @@
 
 START_NAMESPACE_DGL
 
-class TooltipOverlay : public NanoSubWidget
+class TooltipOverlay : public EditorSubWidget
 {
 public:
-    explicit TooltipOverlay(Widget* parent);
+    explicit TooltipOverlay(NanoTopLevelWidget* parent);
 
     // Registers a hover description for `target`, looked up by that
     // widget's own *current* absolute position/size every time the

@@ -93,8 +93,8 @@ std::string EqGraphWidget::formatFreqLabel(double freqHz)
     return std::string(buf);
 }
 
-EqGraphWidget::EqGraphWidget(Widget* parent, ssgui::IEqEditorHost* host)
-    : NanoSubWidget(parent), host_(host)
+EqGraphWidget::EqGraphWidget(NanoTopLevelWidget* parent, ssgui::IEqEditorHost* host)
+    : EditorSubWidget(parent), host_(host)
 {
     loadSharedResources();
     for (float& v : spectrumInDb_) v = SpectrumAnalyzer::kFloorDb;

@@ -66,23 +66,40 @@ Knee, Makeup Gain**.
 
 ## Limiter
 
-**Input Gain, Threshold, Attack, Release, Lookahead, Knee, Ceiling,
-Output Gain**, **Bypass**. Detection is always stereo-linked.
+**Input Gain, Threshold, Attack, Release, Lookahead, Knee, Ceiling, Clip
+Knee, Output Gain**; top row **Bypass**; row 2 above the graph **Algorithm,
+Ratio, Clip, Oversampling, Boost**. Detection is always stereo-linked.
 
 - **Lookahead** (default 5 ms): the audio is delayed so the limiter can
   react before a peak arrives. The delay is reported to the host as
-  latency.
-- **Ceiling** (default 0 dB): a hard limit on the final output sample,
-  after everything else.
+  latency, and Bypass keeps it, so bypassing doesn't shift the audio.
 - **Algorithm: Classic / True Peak** -- Classic is an envelope-follower
-  limiter (fixed 20:1 ratio). True Peak is a sample-accurate lookahead
-  limiter that guarantees the output never exceeds the threshold; Attack
-  and Knee have no effect there and are marked "(unused)".
-- **Boost** adds the threshold's reduction back as output gain (on top of
-  Output Gain), like the "unity gain" switch of other limiters.
-- **Graph**: drag the **Threshold** handle horizontally and the dashed
-  **Ceiling** line vertically; gain-reduction meter and history as in the
-  Compressor.
+  limiter with **Ratio 20:1 / 100:1 / ∞:1**; fast transients can still
+  overshoot the Threshold briefly. True Peak is a sample-accurate
+  lookahead limiter that never lets a sample over the Threshold (always
+  ∞:1); Attack and Knee have no effect there and are marked "(unused)".
+- **Ceiling** (default 0 dB): the output never goes above it. **Boost**
+  (adds the Threshold's reduction back, like the "unity gain" switch of
+  other limiters) and **Output Gain** come after the limiter and are
+  capped so the limited peaks land on the Ceiling instead of being clipped
+  by it; if the Ceiling is below the Threshold, the limiter limits at the
+  Ceiling. The graph says when a gain is capped.
+- **Clip: Hard / Soft** -- what happens to overshoot that still reaches
+  the Ceiling: Hard cuts it flat, Soft rounds it off over the **Clip
+  Knee** below the Ceiling (the shaded band in the graph, its lower edge
+  draggable). With Soft the limited peaks sit at the start of that band.
+  Switching the Algorithm sets the matching default -- Soft for Classic,
+  Hard for True Peak -- which can be changed afterwards.
+- **Oversampling: Off / 4x** -- 4x oversampled peak detection, so peaks
+  between samples (inter-sample peaks, which can go over the Ceiling after
+  D/A conversion or lossy encoding) are limited too. Adds 0.25 ms of
+  latency; off costs nothing extra.
+- **Graph**: the whole chain from input to output. Drag the **Threshold**
+  handle horizontally and the dashed **Ceiling** line vertically. With
+  Boost or Output Gain, a faint line shows the limiter alone and an arrow
+  the gain added after it. A **CLIP** indicator above the gain-reduction
+  meter shows when the clip stage acts; gain-reduction meter and history
+  as in the Compressor.
 
 ## Contour
 
@@ -176,6 +193,8 @@ curve).
   decode/re-encode.
 - `plugin/dsp/TruePeakLimiterDsp.hpp` -- the Limiter's True Peak algorithm
   (sliding-window minimum over the lookahead, a hard guarantee).
+- `plugin/dsp/LimiterDsp.hpp` -- the Limiter's gain staging, clip stage,
+  ratio choices and 4x oversampled peak detector.
 - `plugin/dsp/CurveDsp.hpp` -- Contour's curve (`TransferCurve`),
   `CurveVoice` and the curve's text serialization.
 
@@ -199,25 +218,38 @@ a standalone JACK program. On macOS use `./build_and_install_macos.sh`
 (run on a Mac; needs the Xcode Command Line Tools), which builds
 universal LV2/VST3/AU and installs them into `~/Library/Audio/Plug-Ins/`.
 
+### DPF patches
+
+`dpf/` is the official DPF, unchanged. `dpf-patches/` holds two small
+patches the build scripts apply before building and revert afterwards
+(`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
+(`ui:resize`) when they resize themselves, and automatic scaling can be
+relative to a design size, so editors can be made smaller than it. A plain
+`cmake` build without the scripts needs them applied first:
+`dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
+
 ## Testing
 
 - `dsp_regression` (runs with `--test`): gain computer, envelope
   follower, meters, Mid/Side algebra, voice consistency, the True Peak
-  guarantee and Contour's curve math.
+  guarantee, the Limiter's gain staging, clip stage, ratio and peak detector, and
+  Contour's curve math.
 - `audio_testbench`: real synthetic audio through the DSP chain (accuracy,
   attack/release timing, stereo modes); writes WAV files to
   `tools/testbench/output/`.
 - Plugin-level tests, built by hand (command in each file's header):
   `tests/stereo_trigger_test.cpp`, `tests/stereo_heartbeat_test.cpp`,
   `tests/contour_trigger_test.cpp`, `tests/contour_mono_test.cpp`,
-  `tests/contour_widget_sim.cpp`, `tests/param_strip_sim.cpp`.
+  `tests/contour_widget_sim.cpp`, `tests/param_strip_sim.cpp`,
+  `tests/limiter_test.cpp`, `tests/limiter_bypass_test.cpp`,
+  `tests/limiter_widget_sim.cpp`.
 
 See [docs/TESTING.md](docs/TESTING.md).
 
 ## Project layout
 
 ```
-plugin/dsp/                  DSP core: CompressorDsp.hpp, TruePeakLimiterDsp.hpp, CurveDsp.hpp, SpectrumAnalyzer
+plugin/dsp/                  DSP core: CompressorDsp.hpp, TruePeakLimiterDsp.hpp, LimiterDsp.hpp, CurveDsp.hpp, SpectrumAnalyzer
 plugin_mono/                 Compressor Mono plugin
 plugin_stereo/               Compressor Stereo plugin
 plugin_limiter/              Limiter plugin

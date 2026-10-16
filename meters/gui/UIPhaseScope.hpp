@@ -5,10 +5,13 @@
 
 #include "DistrhoUI.hpp"
 
+#include "EditorSubWidget.hpp"
+
 #include "../plugin/dsp/PhaseScopeDsp.hpp"
 #include "../plugin_phasescope/PluginPhaseScope.hpp"
 #include "GoniometerWidget.hpp"
 #include "LevelMeterWidget.hpp"
+#include "MotionWatcher.hpp"
 #include "ParamStripWidget.hpp"
 #include "SimpleButton.hpp"
 #include "StereoMeterWidget.hpp"
@@ -43,6 +46,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 
@@ -60,6 +64,27 @@ private:
     void setDecayMs(float ms);            // updates decayMs_, scope_, and round-trips through setState("decayMs", ...)
     void setResolutionPercent(float pct); // updates resolutionPercent_, scope_, and round-trips through setState("resolutionPercent", ...)
     void updateTooltip(); // polls every button's/field's own hover state once per uiIdle() tick and shows/hides tooltip_ accordingly
+
+    // Compact view (kStateCompact): the editor shrinks to the goniometer
+    // plus a correlation bar; Freeze and "Full view" appear only while the
+    // mouse is active over it (autohide, see updateAutohide()).
+    // resizeWindow: the Compact/Full view button resizes the window to the
+    // new design size; the automatic switch (updateAutoCompact()) does not,
+    // since there the user is already resizing it.
+    void setCompact(bool compact, bool fromUser, bool resizeWindow = true);
+    // Per uiIdle() tick: switch to compact when the window is made smaller
+    // than kAutoCompactBelow of its normal size, and back to full above
+    // kAutoFullAbove -- only if compact was entered this way, never undoing
+    // a click on Compact. The gap between the two prevents flip-flopping.
+    void updateAutoCompact();
+    static constexpr double kAutoCompactBelow = 0.6;
+    static constexpr double kAutoFullAbove = 0.85;
+    void applyVisibility();  // which widgets show, from compact_ and controlsShown_
+    void updateAutohide();   // per uiIdle() tick: show/hide the compact view's controls
+    void refreshCompactLabel();
+    static constexpr uint kCompactWidth = 260;
+    static constexpr uint kCompactHeight = 300;
+    static constexpr double kAutohideSeconds = 2.0;
 
     static constexpr int kBufferSize = ssmeter::GoniometerBuffer::kScopeBufferSize;
     static constexpr int kHeatmapCellCount = ssmeter::HeatmapGrid::kCellCount;
@@ -88,7 +113,16 @@ private:
     DGL_NAMESPACE::SimpleButton* btnDrawLines_ = nullptr;
     DGL_NAMESPACE::SimpleButton* btnSmooth_ = nullptr;
     DGL_NAMESPACE::SimpleButton* btnHeatmap_ = nullptr;
+    DGL_NAMESPACE::SimpleButton* btnCompact_ = nullptr;
     DGL_NAMESPACE::TooltipOverlay* tooltip_ = nullptr;
+    DGL_NAMESPACE::MotionWatcher* motionWatcher_ = nullptr; // constructed last, see MotionWatcher.hpp
+
+    bool compact_ = false;
+    bool controlsShown_ = true; // compact view only: Freeze/Full view currently visible
+    bool autoCompact_ = false;  // compact view entered by updateAutoCompact(), not by the button
+    uint pendingRestoreHeight_ = 0; // see setCompact(): second half of the 1 px nudge
+    int pendingRestoreTicks_ = 0;
+    uint nudgeLogicalWidth_ = 0;
 
     bool frozen_ = false;
     bool drawLines_ = true; // Lines (and Smooth) on by default

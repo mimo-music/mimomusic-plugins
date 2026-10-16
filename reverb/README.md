@@ -45,7 +45,8 @@ Below the controls is a parametric EQ that shapes only the reverb signal
 click to add a band, drag to shape it, scroll for Q, right-click for the
 band type. A spectrum of the reverb signal before and after the EQ is
 drawn behind the curve (**Fixed Range / Autoscale**). The band list
-below the graph edits every band precisely.
+beside the graph edits every band precisely; below it, the selected band
+gets large Freq / Gain / Q fields.
 
 ## How it works
 
@@ -78,6 +79,16 @@ a VST3 bundle and a standalone JACK program. On macOS use
 `./build_and_install_macos.sh` (run on a Mac; needs the Xcode Command
 Line Tools), which builds universal LV2/VST3/AU and installs them into
 `~/Library/Audio/Plug-Ins/`.
+
+### DPF patches
+
+`dpf/` is the official DPF, unchanged. `dpf-patches/` holds two small
+patches the build scripts apply before building and revert afterwards
+(`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
+(`ui:resize`) when they resize themselves, and automatic scaling can be
+relative to a design size, so editors can be made smaller than it. A plain
+`cmake` build without the scripts needs them applied first:
+`dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
 
 ## Testing
 

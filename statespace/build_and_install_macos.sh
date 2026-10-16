@@ -178,6 +178,11 @@ if [ "$DO_CLEAN" -eq 1 ]; then
     rm -rf "$BUILD_DIR"
 fi
 
+# DPF patches (dpf-patches/, see dpf_patches.sh there): applied for the
+# build, reverted again on exit (also on failure), so dpf/ stays upstream.
+"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" apply "$SCRIPT_DIR/dpf" "$BUILD_DIR"
+trap '"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" revert "$SCRIPT_DIR/dpf" "$BUILD_DIR"' EXIT
+
 echo "-- Configuring (cmake, Release, universal $ARCHES, min macOS $MIN_MACOS) --"
 # If MIN_MACOS predates Apple Silicon (arm64 only ever shipped starting
 # macOS 11) and arm64 is one of the requested ARCHES, clang is expected to

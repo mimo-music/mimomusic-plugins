@@ -5,10 +5,13 @@
 
 #include "DistrhoUI.hpp"
 
+#include "../EditorSubWidget.hpp"
+
 #include "../../plugin/dsp/EqModel.hpp"
 #include "../../plugin/dsp/MonoStabilityGuard.hpp"
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "../../plugin_eq_mono/PluginEqMono.hpp" // for kNumMirroredBands
+#include "../ParamStripWidget.hpp"
 #include "../SimpleButton.hpp"
 #include "../TooltipOverlay.hpp"
 #include "BandListWidget.hpp"
@@ -53,6 +56,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 
@@ -146,6 +150,13 @@ private:
 
     DGL_NAMESPACE::EqGraphWidget* graph_ = nullptr;
     DGL_NAMESPACE::BandListWidget* list_ = nullptr;
+    // The selected band's own large fields, between graph and list -- see
+    // UIEq::refreshBandStrip() (same design; here the list holds the selection).
+    DGL_NAMESPACE::ParamStripWidget* bandStrip_ = nullptr;
+    int bandStripBand_ = -2;
+    int bandStripType_ = -1;
+    float bandStripHeaderY_ = 0.0f;
+    void refreshBandStrip();
 
     DGL_NAMESPACE::SimpleButton* btnLoad_        = nullptr;
     DGL_NAMESPACE::SimpleButton* btnSave_        = nullptr;

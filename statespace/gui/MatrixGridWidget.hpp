@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ModelEditorHost.hpp"
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <chrono>
 #include <string>
@@ -26,10 +26,10 @@ START_NAMESPACE_DGL
 // A click-drag fader-style adjustment is a natural follow-up once desired,
 // left out here to avoid depending on pointer-capture behaviour across
 // widget bounds that this first draft does not verify.
-class MatrixGridWidget : public NanoSubWidget
+class MatrixGridWidget : public EditorSubWidget
 {
 public:
-    MatrixGridWidget(Widget* parent, ssgui::IModelEditorHost* host, ssgui::MatrixKind kind,
+    MatrixGridWidget(NanoTopLevelWidget* parent, ssgui::IModelEditorHost* host, ssgui::MatrixKind kind,
                       const char* title);
 
 protected:

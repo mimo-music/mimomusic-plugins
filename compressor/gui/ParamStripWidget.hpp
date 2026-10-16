@@ -38,7 +38,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -79,10 +79,10 @@ struct ParamFieldSpec
     std::string labelHigh, labelLow; // e.g. "Wet", "Dry" -- only used when bipolarLabel is true
 };
 
-class ParamStripWidget : public NanoSubWidget
+class ParamStripWidget : public EditorSubWidget
 {
 public:
-    explicit ParamStripWidget(Widget* parent);
+    explicit ParamStripWidget(NanoTopLevelWidget* parent);
 
     void setFields(std::vector<ParamFieldSpec> fields) { fields_ = std::move(fields); }
     void setGetter(std::function<float(uint32_t)> getter) { getter_ = std::move(getter); }

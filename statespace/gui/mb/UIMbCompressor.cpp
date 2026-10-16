@@ -37,6 +37,20 @@ enum BandField : uint32_t { kFieldThreshold = 0, kFieldRatio = 1, kFieldRatioUp 
 UIMbCompressor::UIMbCompressor()
     : UI(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT)
 {
+    // Scale with the host's or desktop's scale factor (Ardour's GUI
+    // scaling, else Xft.dpi; DPF_SCALE_FACTOR overrides): DPF draws
+    // everything scaled and zooms when the window is resized, keeping the
+    // aspect ratio; the layout always sees the default (logical) size. The
+    // zoom is relative to the design size (setAutoScaleBaseSize(), DPF
+    // patch dpf-patches/0002), so the window can also be made smaller than
+    // it, down to half (the contents then shrink with it). Not
+    // UI(w, h, true): DPF already creates the window at the scaled size,
+    // and that form resizes it by the scale factor a second time.
+    // Requires every widget to share this editor's NanoVG context (their
+    // constructors take a NanoTopLevelWidget*) -- a widget with its own
+    // context is drawn into an unscaled viewport.
+    getWindow().setAutoScaleBaseSize(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT);
+    setGeometryConstraints(DISTRHO_UI_DEFAULT_WIDTH / 2, DISTRHO_UI_DEFAULT_HEIGHT / 2, true, true, false);
     loadSharedResources();
     fontFace(NANOVG_DEJAVU_SANS_TTF);
 
@@ -955,8 +969,9 @@ bool UIMbCompressor::onKeyboard(const KeyboardEvent& ev)
     }
 }
 
-bool UIMbCompressor::onMouse(const MouseEvent& ev)
+bool UIMbCompressor::onMouse(const MouseEvent& rawEv)
 {
+    const MouseEvent ev = DGL_NAMESPACE::editorLogicalEvent(*this, rawEv); // own hit tests in logical units, see EditorSubWidget.hpp
     const double x = ev.pos.getX(), y = ev.pos.getY();
 
     if (ev.press)
@@ -1001,7 +1016,7 @@ bool UIMbCompressor::onMouse(const MouseEvent& ev)
         }
     }
 
-    return UI::onMouse(ev);
+    return UI::onMouse(rawEv);
 }
 
 void UIMbCompressor::uiFileBrowserSelected(const char* filename)
@@ -1177,6 +1192,16 @@ void UIMbCompressor::rememberPresetDir(const char* filePath)
 
     lastPresetDir_ = dir;
     setState("presetDir", lastPresetDir_.c_str());
+}
+
+void UIMbCompressor::onDisplay()
+{
+    // Replaces DPF's top-level frame, which uses a pixel ratio of 1 (blurry
+    // text when scaled) -- see EditorSubWidget.hpp.
+    NanoVG::beginFrame(getWidth(), getHeight(), DGL_NAMESPACE::editorPixelRatio(*this));
+    onNanoDisplay();
+    DGL_NAMESPACE::paintEditorChildren(*this);
+    NanoVG::endFrame();
 }
 
 UI* createUI() { return new UIMbCompressor(); }

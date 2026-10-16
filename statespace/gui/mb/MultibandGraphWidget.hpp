@@ -44,17 +44,17 @@
 
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "MbEditorHost.hpp"
-#include "NanoVG.hpp"
+#include "../EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
 
 START_NAMESPACE_DGL
 
-class MultibandGraphWidget : public NanoSubWidget
+class MultibandGraphWidget : public EditorSubWidget
 {
 public:
-    MultibandGraphWidget(Widget* parent, ssgui::IMbEditorHost* host);
+    MultibandGraphWidget(NanoTopLevelWidget* parent, ssgui::IMbEditorHost* host);
 
     void setSampleRate(double sr) { sampleRate_ = sr > 0.0 ? sr : sampleRate_; }
 

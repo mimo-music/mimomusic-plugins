@@ -74,8 +74,8 @@ constexpr double kDragDeadZonePx = 3.0;
 
 } // namespace
 
-DynEqBandListWidget2::DynEqBandListWidget2(Widget* parent, ssgui::IDynEqEditorHost2* host)
-    : NanoSubWidget(parent), host_(host)
+DynEqBandListWidget2::DynEqBandListWidget2(NanoTopLevelWidget* parent, ssgui::IDynEqEditorHost2* host)
+    : EditorSubWidget(parent), host_(host)
 {
     loadSharedResources();
 }

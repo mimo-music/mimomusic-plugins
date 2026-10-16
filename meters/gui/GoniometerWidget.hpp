@@ -32,7 +32,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include "../plugin/dsp/PhaseScopeDsp.hpp"
 
@@ -40,10 +40,10 @@
 
 START_NAMESPACE_DGL
 
-class GoniometerWidget : public NanoSubWidget
+class GoniometerWidget : public EditorSubWidget
 {
 public:
-    explicit GoniometerWidget(Widget* parent);
+    explicit GoniometerWidget(NanoTopLevelWidget* parent);
 
     // xs[i]/ys[i]: Side/Mid pairs, already unpacked, in ring-buffer order.
     // writeSlot: the slot ssmeter::GoniometerBuffer will overwrite *next*

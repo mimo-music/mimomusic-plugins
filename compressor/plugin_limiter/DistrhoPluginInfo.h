@@ -3,55 +3,29 @@
 
 // DistrhoPluginInfo.h -- MimoMusic Limiter
 //
-// A third sibling in this project, built on the exact same DSP core as the
-// compressor plugins (plugin/dsp/CompressorDsp.hpp, unchanged): a limiter
-// is still "a compressor tuned a specific way, plus one thing it isn't"
-// underneath -- sscomp::computeGainReductionDb()'s soft-knee ratio line
-// already becomes an effectively brick-wall gain reduction at a high ratio
-// and a near-zero knee, so PluginLimiter reuses sscomp::CompressorVoice
-// verbatim, plus a hard output-ceiling clamp (kParamCeiling) that
-// guarantees the output sample itself never exceeds it even if the
-// envelope follower's attack time lets one sample slip past the gain
-// computer's intended reduction.
+// A stereo limiter on this project's DSP core. Two gain computers
+// (LimiterAlgorithm, PluginLimiter.hpp): Classic, a CompressorVoice
+// (CompressorDsp.hpp) at a high ratio (20:1, 100:1 or infinity:1), and True
+// Peak, a sample-accurate lookahead limiter (TruePeakLimiterDsp.hpp) that
+// never lets a sample over the Threshold. Around them (LimiterDsp.hpp):
 //
-// Reset from scratch: the first
-// version of this plugin exposed PluginCompressorStereo's *entire*
-// parameter set verbatim (Ratio, Up Ratio, Knee, Attack, Volume
-// Compensation, three Stereo Modes) plus Ceiling, which read as "the
-// stereo compressor with an extra knob," not as a limiter -- confusing
-// rather than generic settings similar to the compressor. That version kept only Threshold/Release/Ceiling/Input/Output
-// Gain, fixing Ratio/Attack/Knee/Stereo-mode internally.
+//   - Gain staging: Output Gain and Boost come after the gain computer and
+//     are capped so the limited peaks land on the Ceiling instead of being
+//     clipped by it (computeLimiterStaging()).
+//   - Clip stage for overshoot that still reaches the Ceiling: Hard or Soft
+//     with an adjustable Clip Knee. Switching the Algorithm sets the
+//     matching default (True Peak -> Hard, Classic -> Soft); the user can
+//     change it afterwards.
+//   - Optional 4x oversampled peak detection, so inter-sample peaks are
+//     limited too. Off costs nothing extra.
 //
-// Revised again after
-// comparing against how dedicated limiter plugins (e.g. LSP's Limiter
-// Stereo/Mono) actually lay their controls out: those don't expose Ratio
-// either (a limiter is inherently near-brick-wall, not a tunable ratio),
-// but they do expose Attack, Knee, and -- the one genuinely missing piece
-// here -- **Lookahead**, a small delay buffer that lets the gain computer
-// react to a transient *before* it reaches the output instead of only
-// after, which is most of what makes a dedicated limiter sound cleaner
-// than "a compressor with a hard clip bolted on". So Attack and Knee are
-// real parameters again (this plugin's own values, not shared with the
-// compressors' defaults), and kParamLookahead adds real added-latency
-// look-ahead (DISTRHO_PLUGIN_WANT_LATENCY, below, is now on so hosts
-// compensate for it correctly). Ratio and stereo linking are still fixed
-// internally -- see PluginLimiter.cpp's kFixedRatio -- and Volume
-// Compensation/multiple Stereo Modes are still deliberately not here.
+// Lookahead delays the audio; the delay is reported as latency (also while
+// bypassed). Detection is always stereo-linked: a per-channel or Mid/Side
+// limiter on a stereo bus would move the image.
 //
-// Boost (kParamBoost, PluginLimiter.hpp): like the boost button some
-// limiters have, adding the reduced gain back at the output. Surveyed
-// dedicated limiter plugins first rather than guessing -- LSP's own
-// Limiter Stereo/Mono manual: "Boost - applies corresponding to the
-// Threshold gain to the output signal"; FabFilter Pro-L 2's "Unity
-// Gain" and Slate FG-X's "Constant Gain" both do the same thing tied to
-// their own input-gain knob instead. All three are a STATIC offset from
-// a knob value, not a live tracker of the gain-reduction meter --
-// implemented the same way here, additively on top of Output Gain.
-//
-// Same TODO as every sibling plugin's own DistrhoPluginInfo.h:
-// DISTRHO_PLUGIN_URI must be a URI you actually control before any real
-// release -- the brand/URI below are the publisher's own identity
-// (MimoMusic, www.mimomusic.art).
+// The brand/URI below are the publisher's own identity (MimoMusic,
+// www.mimomusic.art). Keep URI and unique ID unchanged: hosts identify
+// saved sessions by them.
 
 #ifndef DISTRHO_PLUGIN_INFO_H_INCLUDED
 #define DISTRHO_PLUGIN_INFO_H_INCLUDED
@@ -64,12 +38,13 @@
 #define DISTRHO_PLUGIN_URI      "https://www.mimomusic.art/plugins/limiter"
 #define DISTRHO_PLUGIN_CLAP_ID  "art.mimomusic.limiter"
 #define DISTRHO_PLUGIN_DESCRIPTION \
-    "A stereo limiter with lookahead and a hard output ceiling: " \
-    "threshold, attack, release, lookahead, knee, input/output gain and " \
-    "a Boost switch that adds the threshold's reduction back. Two " \
-    "algorithms: Classic (an envelope-follower limiter) and True Peak " \
-    "(a sample-accurate lookahead limiter that never lets the output " \
-    "exceed the threshold). Detection is always stereo-linked."
+    "A stereo limiter with lookahead whose output never exceeds the " \
+    "ceiling: Output Gain and Boost are capped so the limited peaks land " \
+    "on the ceiling instead of being clipped. Hard or soft output clipping " \
+    "for overshoot, optional 4x oversampled (inter-sample) peak detection. " \
+    "Two algorithms: Classic (an envelope-follower limiter, ratio 20:1 to " \
+    "infinity:1) and True Peak (a sample-accurate lookahead limiter). " \
+    "Detection is always stereo-linked."
 
 // 4-character codes packed into a 32-bit id, used by VST2/AU-style hosts.
 // Distinct from the sibling compressor plugins' CMmo/CMst.
@@ -82,7 +57,7 @@
 #define DISTRHO_PLUGIN_NUM_OUTPUTS     2
 #define DISTRHO_PLUGIN_WANT_STATE      1
 #define DISTRHO_PLUGIN_WANT_PROGRAMS   0
-#define DISTRHO_PLUGIN_WANT_LATENCY    1 // kParamLookahead adds real delay-buffer latency -- hosts need to know, see PluginLimiter.cpp's setLatency() call
+#define DISTRHO_PLUGIN_WANT_LATENCY    1 // Lookahead (and Oversampling) delay the audio -- see PluginLimiter::updateLookahead()
 #define DISTRHO_PLUGIN_WANT_TIMEPOS    0
 
 #define DISTRHO_UI_USE_NANOVG          1

@@ -32,8 +32,8 @@ Color bandColor(int index)
 
 } // namespace
 
-MultibandGraphWidget::MultibandGraphWidget(Widget* parent, ssgui::IMbEditorHost* host)
-    : NanoSubWidget(parent), host_(host)
+MultibandGraphWidget::MultibandGraphWidget(NanoTopLevelWidget* parent, ssgui::IMbEditorHost* host)
+    : EditorSubWidget(parent), host_(host)
 {
     loadSharedResources();
     for (float& v : spectrumInDb_) v = SpectrumAnalyzer::kFloorDb;

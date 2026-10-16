@@ -152,6 +152,7 @@ dpf_add_plugin(parametric_eq
       plugin/dsp/EqModel.cpp
       plugin/dsp/SpectrumAnalyzer.cpp
   FILES_UI
+      gui/ParamStripWidget.cpp
       gui/eq/UIEq.cpp
       gui/eq/EqGraphWidget.cpp
       gui/eq/BandListWidget.cpp
@@ -194,6 +195,7 @@ dpf_add_plugin(parametric_eq_mono
       plugin/dsp/EqModel.cpp
       plugin/dsp/SpectrumAnalyzer.cpp
   FILES_UI
+      gui/ParamStripWidget.cpp
       gui/eq/UIEqMono.cpp
       gui/eq/EqGraphWidget.cpp
       gui/eq/BandListWidget.cpp
@@ -325,6 +327,7 @@ dpf_add_plugin(dynamic_eq2
       plugin/dsp/EqModel.cpp # DynamicEqModel2.cpp reuses eq::evaluateBiquadResponse(), see its own comment
       plugin/dsp/SpectrumAnalyzer.cpp
   FILES_UI
+      gui/ParamStripWidget.cpp
       gui/dyneq2/UIDynEq2.cpp
       gui/dyneq2/DynEqGraphWidget2.cpp
       gui/dyneq2/DynEqBandListWidget2.cpp

@@ -11,8 +11,8 @@
 
 START_NAMESPACE_DGL
 
-ParamStripWidget::ParamStripWidget(Widget* parent)
-    : NanoSubWidget(parent)
+ParamStripWidget::ParamStripWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
 }
@@ -177,9 +177,34 @@ void ParamStripWidget::onNanoDisplay()
         // tint below applies to the *label*, never here.
         fillColor(editing ? Color(0, 0, 0) : Color(224, 227, 232));
         fontFace(NANOVG_DEJAVU_SANS_TTF);
-        fontSize(editing ? 15.5f : 14.5f);
+        // Fit the text into the field: when "value unit" is too wide, the
+        // unit moves to a second, smaller line; anything still too wide
+        // (a long number, or the edit buffer) is drawn in a smaller font.
+        const float cx = fieldX_[i] + fieldW_[i] * 0.5f;
+        const float maxW = std::max(4.0f, fieldW_[i] - 8.0f);
+        const float fs = editing ? 15.5f : 14.5f;
+        auto fitText = [&](const std::string& s, float size, float minSize, float y) {
+            fontSize(size);
+            Rectangle<float> b;
+            textBounds(0.0f, 0.0f, s.c_str(), nullptr, b);
+            if (b.getWidth() > maxW && b.getWidth() > 0.0f)
+                fontSize(std::max(minSize, size * maxW / b.getWidth()));
+            text(cx, y, s.c_str(), nullptr);
+        };
         textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
-        text(fieldX_[i] + fieldW_[i] * 0.5f, fieldY_ + fieldH_ * 0.40f, toShow.c_str(), nullptr);
+        fontSize(fs);
+        Rectangle<float> whole;
+        textBounds(0.0f, 0.0f, toShow.c_str(), nullptr, whole);
+        const size_t unitSep = toShow.rfind(' ');
+        if (!editing && whole.getWidth() > maxW && unitSep != std::string::npos && unitSep + 1 < toShow.size())
+        {
+            fitText(toShow.substr(0, unitSep), fs, 8.0f, fieldY_ + fieldH_ * 0.30f);
+            fitText(toShow.substr(unitSep + 1), 10.0f, 7.0f, fieldY_ + fieldH_ * 0.56f);
+        }
+        else
+        {
+            fitText(toShow, fs, 8.0f, fieldY_ + fieldH_ * 0.40f);
+        }
 
         const float labelY = fieldY_ + fieldH_ * 0.80f;
         fontSize(10.5f);

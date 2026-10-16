@@ -5,10 +5,13 @@
 
 #include "DistrhoUI.hpp"
 
+#include "../EditorSubWidget.hpp"
+
 #include "../../plugin/dsp/EqModel.hpp"
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "../../plugin/dsp/StabilityGuard.hpp"
 #include "../../plugin_eq/PluginEq.hpp" // for kNumMirroredBands
+#include "../ParamStripWidget.hpp"
 #include "../SimpleButton.hpp"
 #include "../TooltipOverlay.hpp"
 #include "BandListWidget.hpp"
@@ -35,6 +38,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 
@@ -128,6 +132,12 @@ private:
     // selectBand() already establishes, ported here specifically so
     // Audition has a single band index to act on.
     void selectBand(int index);
+    // The selected band's own large fields (bandStrip_), between graph and
+    // list: Freq/Gain/Q/Bandwidth, the same drag/type/scroll fields as
+    // elsewhere -- easier to hit than the list's small cells. Fields that
+    // the band's type ignores are marked "(unused)". Rebuilt only when the
+    // selection or the band's type changes (not while a field is edited).
+    void refreshBandStrip();
     void refreshAuditionColors(); // keeps btnAudition_'s colors/enabled-state in sync with auditioning_/selectedBand_
     void beginTrimTextEdit(bool clearValue);
     void beginSmoothTextEdit(bool clearValue);
@@ -178,6 +188,10 @@ private:
 
     DGL_NAMESPACE::EqGraphWidget* graph_ = nullptr;
     DGL_NAMESPACE::BandListWidget* list_ = nullptr;
+    DGL_NAMESPACE::ParamStripWidget* bandStrip_ = nullptr; // see refreshBandStrip()
+    int bandStripBand_ = -2;  // band/type the strip's fields were last built for
+    int bandStripType_ = -1;
+    float bandStripHeaderY_ = 0.0f; // "Band N . Type" heading, drawn in onNanoDisplay()
 
     DGL_NAMESPACE::SimpleButton* btnLoad_        = nullptr;
     DGL_NAMESPACE::SimpleButton* btnSave_        = nullptr;

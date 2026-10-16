@@ -45,10 +45,11 @@ void formatFreqLabel(char* buf, size_t bufSize, double f)
 }
 } // namespace
 
-BodePlotWidget::BodePlotWidget(Widget* parent) : NanoSubWidget(parent)
+BodePlotWidget::BodePlotWidget(NanoTopLevelWidget* parent) : EditorSubWidget(parent)
 {
-    // Each NanoSubWidget owns its own NanoVG context, so the bundled font
-    // must be (re-)loaded here too -- loadSharedResources() is idempotent.
+    // The context is shared with the editor (see EditorSubWidget.hpp),
+    // which has usually loaded the bundled font already;
+    // loadSharedResources() is idempotent, so this only makes sure.
     loadSharedResources();
 }
 

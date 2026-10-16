@@ -7,7 +7,7 @@
 // kept identical so both projects' GUIs share the exact same button look
 // and click/hover behavior.
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <functional>
 #include <string>
@@ -17,10 +17,10 @@ START_NAMESPACE_DGL
 // A minimal push-button: solid rect, centered label, invokes a callback on
 // click-release-inside. Deliberately does not use DPF's ButtonEventHandler
 // mixin to keep this self-contained and easy to read.
-class SimpleButton : public NanoSubWidget
+class SimpleButton : public EditorSubWidget
 {
 public:
-    explicit SimpleButton(Widget* parent, const char* label);
+    explicit SimpleButton(NanoTopLevelWidget* parent, const char* label);
 
     void setCallback(std::function<void()> cb) { callback_ = std::move(cb); }
     void setColors(Color bg, Color bgHover, Color fg);

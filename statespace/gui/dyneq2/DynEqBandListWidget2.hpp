@@ -23,7 +23,7 @@
 #pragma once
 
 #include "DynEqEditorHost2.hpp"
-#include "NanoVG.hpp"
+#include "../EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -31,10 +31,10 @@
 
 START_NAMESPACE_DGL
 
-class DynEqBandListWidget2 : public NanoSubWidget
+class DynEqBandListWidget2 : public EditorSubWidget
 {
 public:
-    DynEqBandListWidget2(Widget* parent, ssgui::IDynEqEditorHost2* host);
+    DynEqBandListWidget2(NanoTopLevelWidget* parent, ssgui::IDynEqEditorHost2* host);
 
     void setSelectedBand(int index) { selectedBand_ = index; }
     int getSelectedBand() const { return selectedBand_; }

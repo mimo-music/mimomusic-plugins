@@ -37,7 +37,7 @@
 #pragma once
 
 #include "ModelEditorHost.hpp"
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <chrono>
 #include <functional>
@@ -45,10 +45,10 @@
 
 START_NAMESPACE_DGL
 
-class NonlinearPanelWidget : public NanoSubWidget
+class NonlinearPanelWidget : public EditorSubWidget
 {
 public:
-    NonlinearPanelWidget(Widget* parent, ssgui::IModelEditorHost* host);
+    NonlinearPanelWidget(NanoTopLevelWidget* parent, ssgui::IModelEditorHost* host);
 
     // Fired when "Apply Curve" is clicked -- the caller (UIStateSpace) owns
     // the actual threshold/ratio/makeup values (read back via the host's

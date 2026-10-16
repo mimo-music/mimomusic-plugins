@@ -4,7 +4,7 @@
 #pragma once
 
 #include "../plugin/dsp/TransferFunction.hpp"
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include <functional>
 #include <string>
@@ -35,10 +35,10 @@ START_NAMESPACE_DGL
 // "LOG"/"LIN" label in the top-right corner to switch (re-sweeps against
 // the last model passed to recompute(), which is kept around for exactly
 // this so the caller doesn't need to resupply it).
-class BodePlotWidget : public NanoSubWidget
+class BodePlotWidget : public EditorSubWidget
 {
 public:
-    explicit BodePlotWidget(Widget* parent);
+    explicit BodePlotWidget(NanoTopLevelWidget* parent);
 
     void recompute(const ssfilter::StateSpaceMatrices& model, double sampleRate);
     void setFault(bool active) { faultActive_ = active; repaint(); }

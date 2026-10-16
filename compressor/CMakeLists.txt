@@ -16,14 +16,11 @@
 #   - compressor_mono:   1-in/1-out feed-forward compressor
 #   - compressor_stereo: 2-in/2-out, with a Linked/Dual-Mono/
 #                                  Mid-Side stereo mode switch
-#   - limiter:           2-in/2-out, the exact same DSP core as
-#                                  the stereo compressor (plugin/dsp/
-#                                  CompressorDsp.hpp, unchanged) defaulted
-#                                  and labeled for limiting (high ratio,
-#                                  fast attack, tight knee) plus a hard
-#                                  output-Ceiling clamp neither compressor
-#                                  plugin has -- see plugin_limiter/
-#                                  DistrhoPluginInfo.h's own comment.
+#   - limiter:           2-in/2-out, Classic (the compressor core at
+#                                  a high ratio) or True Peak gain computer,
+#                                  Ceiling-capped output gain, Hard/Soft clip,
+#                                  optional 4x oversampled peak detection --
+#                                  see plugin_limiter/DistrhoPluginInfo.h.
 #   - contour_mono:      the mono version of contour -- the same source files
 #                                  built again with CONTOUR_MONO (see below)
 #   - contour:           2-in/2-out, a freely-drawn input/output curve

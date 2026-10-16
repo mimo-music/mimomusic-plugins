@@ -96,7 +96,10 @@ processors on top of it.
   double-clicking it or with Delete/Backspace.
 - **Band list** below the graph: type, **EN**able, **SOLO**, channel,
   **FREQ**, **BW**, **GAIN**, **Q** and delete per band, all editable as
-  value fields. **+ Band** adds one.
+  value fields. **+ Band** adds one (and selects it).
+- **Selected band**: between graph and list, the band selected in either
+  of them gets large Freq / Gain / Q / Bandwidth fields (values its type
+  ignores are marked "unused").
 - **Channel** (stereo version): **Both**, **Left only**, **Right only**,
   **L→R** or **R→L**. A Left/Right-only band filters only that channel
   and leaves the other untouched; the graph then shows a separate blue
@@ -180,6 +183,9 @@ Parametric EQ's editor and more band types:
   THRESH, RATIO, UP (up ratio), RANGE, ATTACK, RELEASE and delete. Values
   can be typed, dragged or scrolled; fields that don't apply to a band's
   type show "--", and the dynamics values are dimmed while DYN is off.
+- **Selected band**: between graph and list, large fields for the selected
+  band's Freq, Gain, Q (Bandwidth for a Band Shelf), Threshold, Ratio, Up
+  Ratio, Range, Attack and Release ("unused" while DYN is off).
   Solo works on one band at a time.
 - **Types**: Bell, Low Shelf, High Shelf and Band Shelf. The shelves have
   a fixed slope, so Q only applies to a Bell; a Band Shelf uses BW.
@@ -222,6 +228,16 @@ The build produces, for `matrix_filter`, `parametric_eq`,
 program. On macOS use `./build_and_install_macos.sh` (run on a Mac; needs
 the Xcode Command Line Tools), which builds universal LV2/VST3/AU and
 installs them into `~/Library/Audio/Plug-Ins/`.
+
+### DPF patches
+
+`dpf/` is the official DPF, unchanged. `dpf-patches/` holds two small
+patches the build scripts apply before building and revert afterwards
+(`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
+(`ui:resize`) when they resize themselves, and automatic scaling can be
+relative to a design size, so editors can be made smaller than it. A plain
+`cmake` build without the scripts needs them applied first:
+`dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
 
 ## Testing
 

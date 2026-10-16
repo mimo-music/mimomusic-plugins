@@ -13,8 +13,8 @@ using sscomp::CurvePoint;
 using sscomp::TransferCurve;
 using sscomp::TriggerCondition;
 
-ContourGraphWidget::ContourGraphWidget(Widget* parent)
-    : NanoSubWidget(parent)
+ContourGraphWidget::ContourGraphWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
     std::fill(std::begin(history_), std::end(history_), 0.0f);

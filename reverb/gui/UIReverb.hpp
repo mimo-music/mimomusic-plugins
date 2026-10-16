@@ -5,6 +5,8 @@
 
 #include "DistrhoUI.hpp"
 
+#include "EditorSubWidget.hpp"
+
 #include "../plugin/dsp/EqModel.hpp"
 #include "../plugin/dsp/ReverbEngine.hpp"
 #include "../plugin/dsp/SpectrumAnalyzer.hpp"
@@ -46,6 +48,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 
@@ -104,6 +107,14 @@ private:
     DGL_NAMESPACE::SimpleButton* btnNoteValue_ = nullptr;
     DGL_NAMESPACE::EqGraphWidget* graph_ = nullptr;
     DGL_NAMESPACE::BandListWidget* list_ = nullptr;
+    // The selected EQ band's own large fields, below the band list (same
+    // design as the Parametric EQ's band strip): Freq/Gain/Q,
+    // "(unused)" where the band's type ignores a value. Rebuilt only on a
+    // selection/type change, never while a field is being edited.
+    DGL_NAMESPACE::ParamStripWidget* bandStrip_ = nullptr;
+    int bandStripKey_ = -1;
+    float bandStripHeaderX_ = 0.0f, bandStripHeaderY_ = 0.0f;
+    void refreshBandStrip();
     DGL_NAMESPACE::TooltipOverlay* tooltip_ = nullptr; // constructed LAST -- see its own file comment
 
     // Local UI-side mirrors, kept current by parameterChanged()/

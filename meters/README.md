@@ -37,6 +37,7 @@ Hover over any button or field in either editor for a short description.
 | **Res** | 10–100 %, default 100 | Fraction of the points drawn -- lower it on a slow machine; nothing is lost, raising it shows the full trail again. |
 | **Heatmap** / **Heat** | off; 1–30 s, default 5 | A long-term density glow under the trail, showing where the signal has spent its time. It keeps recording while hidden and follows Gain changes. |
 | **Freeze** | | Pauses the display. |
+| **Compact** / **Full view** | off | A small window (260 x 300 at 1x scale) with only the scope and the correlation bar, to keep open next to other windows. Its Freeze and Full view buttons appear while the mouse moves over it and hide 2 s after it stops. Remembered with the session. |
 
 ## Loudness Meter
 
@@ -100,6 +101,16 @@ The build produces, for `phase_scope` and `loudness_meter`, an LV2
 bundle, a VST3 bundle and a standalone JACK program. On macOS use
 `./build_and_install_macos.sh` (run on a Mac), which builds universal
 LV2/VST3/AU and installs them into `~/Library/Audio/Plug-Ins/`.
+
+### DPF patches
+
+`dpf/` is the official DPF, unchanged. `dpf-patches/` holds two small
+patches the build scripts apply before building and revert afterwards
+(`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
+(`ui:resize`) when they resize themselves, and automatic scaling can be
+relative to a design size, so editors can be made smaller than it. A plain
+`cmake` build without the scripts needs them applied first:
+`dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
 
 ## Testing
 

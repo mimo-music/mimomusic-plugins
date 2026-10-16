@@ -161,6 +161,11 @@ if [ "$DO_CLEAN" -eq 1 ]; then
     rm -rf "$BUILD_DIR"
 fi
 
+# DPF patches (dpf-patches/, see dpf_patches.sh there): applied for the
+# build, reverted again on exit (also on failure), so dpf/ stays upstream.
+"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" apply "$SCRIPT_DIR/dpf" "$BUILD_DIR"
+trap '"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" revert "$SCRIPT_DIR/dpf" "$BUILD_DIR"' EXIT
+
 echo "-- Configuring (cmake, Release, universal $ARCHES, min macOS $MIN_MACOS) --"
 # See the sibling script's identical comment: a clang "overriding
 # deployment target ... because -arch arm64" message for that slice is

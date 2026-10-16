@@ -12,8 +12,8 @@ START_NAMESPACE_DGL
 
 using sscomp::SpectrumAnalyzer;
 
-SidechainScopeWidget::SidechainScopeWidget(Widget* parent)
-    : NanoSubWidget(parent)
+SidechainScopeWidget::SidechainScopeWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
     std::fill(std::begin(spectrumInDb_), std::end(spectrumInDb_), SpectrumAnalyzer::kFloorDb);

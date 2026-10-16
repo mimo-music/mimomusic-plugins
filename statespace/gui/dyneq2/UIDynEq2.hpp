@@ -20,9 +20,12 @@
 
 #include "DistrhoUI.hpp"
 
+#include "../EditorSubWidget.hpp"
+
 #include "../../plugin/dsp/DynamicEqModel2.hpp"
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "../../plugin_dyn_eq2/PluginDynEq2.hpp" // for kNumMirroredBands
+#include "../ParamStripWidget.hpp"
 #include "../SimpleButton.hpp"
 #include "../TooltipOverlay.hpp"
 #include "DynEqBandListWidget2.hpp"
@@ -49,6 +52,7 @@ protected:
     void stateChanged(const char* key, const char* value) override;
 
     void onNanoDisplay() override;
+    void onDisplay() override; // DPF's frame, with the real pixel ratio -- see EditorSubWidget.hpp
     void onResize(const ResizeEvent& ev) override;
     void uiIdle() override;
 
@@ -176,6 +180,15 @@ private:
 
     DGL_NAMESPACE::DynEqGraphWidget2* graph_ = nullptr;
     DGL_NAMESPACE::DynEqBandListWidget2* list_ = nullptr;
+    // The selected band's own large fields between graph and list (same
+    // design as the Parametric EQ's, see UIEq::refreshBandStrip()), here
+    // with the dynamics too; "(unused)" marks what the band's type or its
+    // switched-off dynamics ignore. Rebuilt only on selection/type/dynamics
+    // changes, never while a field is being edited.
+    DGL_NAMESPACE::ParamStripWidget* bandStrip_ = nullptr;
+    int bandStripKey_ = -1;
+    float bandStripHeaderY_ = 0.0f;
+    void refreshBandStrip();
 
     DGL_NAMESPACE::SimpleButton* btnLoad_       = nullptr;
     DGL_NAMESPACE::SimpleButton* btnSave_       = nullptr;

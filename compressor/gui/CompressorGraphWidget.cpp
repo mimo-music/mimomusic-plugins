@@ -11,8 +11,8 @@
 
 START_NAMESPACE_DGL
 
-CompressorGraphWidget::CompressorGraphWidget(Widget* parent)
-    : NanoSubWidget(parent)
+CompressorGraphWidget::CompressorGraphWidget(NanoTopLevelWidget* parent)
+    : EditorSubWidget(parent)
 {
     loadSharedResources();
     std::fill(std::begin(history_), std::end(history_), 0.0f);

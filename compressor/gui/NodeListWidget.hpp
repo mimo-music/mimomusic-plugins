@@ -35,7 +35,7 @@
 
 #pragma once
 
-#include "NanoVG.hpp"
+#include "EditorSubWidget.hpp"
 
 #include "../plugin/dsp/CurveDsp.hpp"
 
@@ -45,10 +45,10 @@
 
 START_NAMESPACE_DGL
 
-class NodeListWidget : public NanoSubWidget
+class NodeListWidget : public EditorSubWidget
 {
 public:
-    explicit NodeListWidget(Widget* parent);
+    explicit NodeListWidget(NanoTopLevelWidget* parent);
 
     void setCurve(const sscomp::TransferCurve& curve);
     const sscomp::TransferCurve& curve() const { return curve_; }
