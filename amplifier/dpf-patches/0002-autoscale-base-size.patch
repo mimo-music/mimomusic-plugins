@@ -1,8 +1,8 @@
 diff --git a/dgl/Window.hpp b/dgl/Window.hpp
-index 64d0f561..e9440384 100644
+index 64d0f561..dcf636d6 100644
 --- a/dgl/Window.hpp
 +++ b/dgl/Window.hpp
-@@ -471,6 +471,15 @@ public:
+@@ -471,6 +471,25 @@ public:
                                  bool automaticallyScale = false,
                                  bool resizeNowIfAutoScaling = true);
  
@@ -15,11 +15,21 @@ index 64d0f561..e9440384 100644
 +    */
 +    void setAutoScaleBaseSize(uint width, uint height);
 +
++   /**
++      MimoMusic patch (dpf-patches/0002).
++      Rounds the automatic scale factor down to a multiple of @a step while the window is larger
++      than its scale factor alone would make it, never below that scale factor. Drawing a layout
++      at a fractional zoom such as 1.37 puts its pixel-aligned lines and glyph edges between
++      physical pixels (soft); at multiples of 0.5 they stay sharp. The window's remaining space
++      goes to the layout as extra logical size. 0, the default, keeps the factor continuous.
++    */
++    void setAutoScaleStep(double step);
++
     /**
        Set the transient parent of the window.
  
 diff --git a/dgl/src/Window.cpp b/dgl/src/Window.cpp
-index 6f7562e2..31404d8b 100644
+index 43156513..6e4d281a 100644
 --- a/dgl/src/Window.cpp
 +++ b/dgl/src/Window.cpp
 @@ -291,8 +291,11 @@ void Window::setSize(uint width, uint height)
@@ -36,7 +46,7 @@ index 6f7562e2..31404d8b 100644
              const double reqRatio = static_cast<double>(width)
                                    / static_cast<double>(height);
  
-@@ -493,6 +496,12 @@ Size<uint> Window::getGeometryConstraints(bool& keepAspectRatio)
+@@ -499,6 +502,17 @@ Size<uint> Window::getGeometryConstraints(bool& keepAspectRatio)
      return Size<uint>(pData->minWidth, pData->minHeight);
  }
  
@@ -46,50 +56,68 @@ index 6f7562e2..31404d8b 100644
 +    pData->autoScaleBaseHeight = height;
 +}
 +
++void Window::setAutoScaleStep(const double step)
++{
++    pData->autoScaleStep = step > 0.0 ? step : 0.0;
++}
++
  void Window::setGeometryConstraints(uint minimumWidth,
                                      uint minimumHeight,
                                      const bool keepAspectRatio,
 diff --git a/dgl/src/WindowPrivateData.cpp b/dgl/src/WindowPrivateData.cpp
-index d7a3c934..490e0e5d 100644
+index d7a3c934..05cace26 100644
 --- a/dgl/src/WindowPrivateData.cpp
 +++ b/dgl/src/WindowPrivateData.cpp
-@@ -120,6 +120,8 @@ Window::PrivateData::PrivateData(Application& a, Window* const s)
+@@ -15,6 +15,8 @@
+  */
+ 
+ #include "WindowPrivateData.hpp"
++
++#include <cmath>
+ #include "TopLevelWidgetPrivateData.hpp"
+ 
+ #include "pugl.hpp"
+@@ -120,6 +122,9 @@ Window::PrivateData::PrivateData(Application& a, Window* const s)
        autoScaleFactor(1.0),
        minWidth(0),
        minHeight(0),
 +      autoScaleBaseWidth(0),
 +      autoScaleBaseHeight(0),
++      autoScaleStep(0.0),
        keepAspectRatio(false),
        ignoreIdleCallbacks(false),
        waitingForClipboardData(false),
-@@ -153,6 +155,8 @@ Window::PrivateData::PrivateData(Application& a, Window* const s, PrivateData* c
+@@ -153,6 +158,9 @@ Window::PrivateData::PrivateData(Application& a, Window* const s, PrivateData* c
        autoScaleFactor(1.0),
        minWidth(0),
        minHeight(0),
 +      autoScaleBaseWidth(0),
 +      autoScaleBaseHeight(0),
++      autoScaleStep(0.0),
        keepAspectRatio(false),
        ignoreIdleCallbacks(false),
        waitingForClipboardData(false),
-@@ -188,6 +192,8 @@ Window::PrivateData::PrivateData(Application& a, Window* const s,
+@@ -188,6 +196,9 @@ Window::PrivateData::PrivateData(Application& a, Window* const s,
        autoScaleFactor(1.0),
        minWidth(0),
        minHeight(0),
 +      autoScaleBaseWidth(0),
 +      autoScaleBaseHeight(0),
++      autoScaleStep(0.0),
        keepAspectRatio(false),
        ignoreIdleCallbacks(false),
        waitingForClipboardData(false),
-@@ -226,6 +232,8 @@ Window::PrivateData::PrivateData(Application& a, Window* const s,
+@@ -226,6 +237,9 @@ Window::PrivateData::PrivateData(Application& a, Window* const s,
        autoScaleFactor(1.0),
        minWidth(0),
        minHeight(0),
 +      autoScaleBaseWidth(0),
 +      autoScaleBaseHeight(0),
++      autoScaleStep(0.0),
        keepAspectRatio(false),
        ignoreIdleCallbacks(false),
        waitingForClipboardData(false),
-@@ -652,8 +660,11 @@ void Window::PrivateData::onPuglConfigure(const uint width, const uint height)
+@@ -652,9 +666,19 @@ void Window::PrivateData::onPuglConfigure(const uint width, const uint height)
  
      if (autoScaling)
      {
@@ -101,19 +129,30 @@ index d7a3c934..490e0e5d 100644
 +        const double scaleHorizontal = width  / static_cast<double>(baseWidth);
 +        const double scaleVertical   = height / static_cast<double>(baseHeight);
          autoScaleFactor = scaleHorizontal < scaleVertical ? scaleHorizontal : scaleVertical;
++
++        // MimoMusic patch (dpf-patches/0002): round down to the step, not below the scale factor
++        if (autoScaleStep > 0.0 && autoScaleFactor > scaleFactor)
++        {
++            const double stepped = std::floor(autoScaleFactor / autoScaleStep + 1e-6) * autoScaleStep;
++            autoScaleFactor = stepped > scaleFactor ? stepped : scaleFactor;
++        }
      }
      else
+     {
 diff --git a/dgl/src/WindowPrivateData.hpp b/dgl/src/WindowPrivateData.hpp
-index 38831848..ec17623d 100644
+index 38831848..a06c6dd3 100644
 --- a/dgl/src/WindowPrivateData.hpp
 +++ b/dgl/src/WindowPrivateData.hpp
-@@ -79,6 +79,9 @@ struct Window::PrivateData : IdleCallback {
+@@ -79,6 +79,12 @@ struct Window::PrivateData : IdleCallback {
  
      /** Pugl geometry constraints access. */
      uint minWidth, minHeight;
 +
 +    /** Reference size for automatic scaling, 0 = minWidth/minHeight (MimoMusic patch, dpf-patches/0002). */
 +    uint autoScaleBaseWidth, autoScaleBaseHeight;
++
++    /** Step the automatic scale factor is rounded down to, 0 = continuous (MimoMusic patch, dpf-patches/0002). */
++    double autoScaleStep;
      bool keepAspectRatio;
  
      /** Whether to ignore idle callback requests, useful for temporary windows. */

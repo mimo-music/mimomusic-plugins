@@ -183,10 +183,11 @@ Parametric EQ's editor and more band types:
   THRESH, RATIO, UP (up ratio), RANGE, ATTACK, RELEASE and delete. Values
   can be typed, dragged or scrolled; fields that don't apply to a band's
   type show "--", and the dynamics values are dimmed while DYN is off.
+  Solo works on one band at a time.
 - **Selected band**: between graph and list, large fields for the selected
   band's Freq, Gain, Q (Bandwidth for a Band Shelf), Threshold, Ratio, Up
-  Ratio, Range, Attack and Release ("unused" while DYN is off).
-  Solo works on one band at a time.
+  Ratio, Range, Attack and Release (marked "unused" where the type or a
+  switched-off DYN ignores them).
 - **Types**: Bell, Low Shelf, High Shelf and Band Shelf. The shelves have
   a fixed slope, so Q only applies to a Bell; a Band Shelf uses BW.
 - **Harmonic linking**: linked bands move together in frequency, share
@@ -235,7 +236,9 @@ installs them into `~/Library/Audio/Plug-Ins/`.
 patches the build scripts apply before building and revert afterwards
 (`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
 (`ui:resize`) when they resize themselves, and automatic scaling can be
-relative to a design size, so editors can be made smaller than it. A plain
+relative to a design size, so editors can be made smaller than it, and
+enlarged in half zoom steps (2x, 2.5x, ... -- fractional zooms such as
+1.37x look soft; the extra space goes to the layout). A plain
 `cmake` build without the scripts needs them applied first:
 `dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
 
@@ -265,7 +268,7 @@ gui/eq/, gui/mb/,       editors of the EQs, the Multiband Compressor and
 gui/dyneq/, gui/dyneq2/ the Dynamic EQs
 presets/factory/        factory presets
 tools/                  audio testbench and the gain-curve trainers
-tests/                  dsp_regression
+tests/                  dsp_regression, dyneq2_list_sim
 docs/                   ARCHITECTURE.md, EXTENDING.md, TESTING.md
 dpf/                    DISTRHO Plugin Framework (git submodule)
 ```

@@ -46,6 +46,10 @@ UIStateSpace::UIStateSpace()
     // constructors take a NanoTopLevelWidget*) -- a widget with its own
     // context is drawn into an unscaled viewport.
     getWindow().setAutoScaleBaseSize(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT);
+    // Enlarged by dragging: zoom in half steps (2, 2.5, 3, ...) -- at
+    // fractional zooms like 1.37 lines and text fall between physical
+    // pixels and look soft; the remaining space goes to the layout.
+    getWindow().setAutoScaleStep(0.5);
     setGeometryConstraints(DISTRHO_UI_DEFAULT_WIDTH / 2, DISTRHO_UI_DEFAULT_HEIGHT / 2, true, true, false);
     loadSharedResources();
     fontFace(NANOVG_DEJAVU_SANS_TTF);

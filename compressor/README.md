@@ -224,7 +224,9 @@ universal LV2/VST3/AU and installs them into `~/Library/Audio/Plug-Ins/`.
 patches the build scripts apply before building and revert afterwards
 (`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
 (`ui:resize`) when they resize themselves, and automatic scaling can be
-relative to a design size, so editors can be made smaller than it. A plain
+relative to a design size, so editors can be made smaller than it, and
+enlarged in half zoom steps (2x, 2.5x, ... -- fractional zooms such as
+1.37x look soft; the extra space goes to the layout). A plain
 `cmake` build without the scripts needs them applied first:
 `dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
 

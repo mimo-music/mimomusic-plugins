@@ -47,6 +47,10 @@ UIDynEq2::UIDynEq2()
     // constructors take a NanoTopLevelWidget*) -- a widget with its own
     // context is drawn into an unscaled viewport.
     getWindow().setAutoScaleBaseSize(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT);
+    // Enlarged by dragging: zoom in half steps (2, 2.5, 3, ...) -- at
+    // fractional zooms like 1.37 lines and text fall between physical
+    // pixels and look soft; the remaining space goes to the layout.
+    getWindow().setAutoScaleStep(0.5);
     setGeometryConstraints(DISTRHO_UI_DEFAULT_WIDTH / 2, DISTRHO_UI_DEFAULT_HEIGHT / 2, true, true, false);
     loadSharedResources();
     fontFace(NANOVG_DEJAVU_SANS_TTF);
@@ -373,8 +377,11 @@ void UIDynEq2::refreshBandStrip()
           "Freq: the selected band's frequency (drag, double-click to type, scroll; Alt = finer)." },
         { hasGain ? "Gain" : "Gain (unused)", "dB", -24.0f, 24.0f, 0.0f, 0.5f, false, 1, 1,
           hasGain ? "Gain: the band's resting boost or cut, before dynamics move it." : "Gain: not used by this band type." },
-        { "Q", "", 0.05f, 100.0f, 1.0f, 1.08f, true, 2, 2,
-          "Q: how narrow (high) or wide (low) the band and its detector are." },
+        // Q shapes only a Bell here: the shelves have a fixed slope and a
+        // Band Shelf uses its bandwidth (the list shows "--" for them too).
+        { b.type == ssfilter::EqBandType::Bell ? "Q" : "Q (unused)", "", 0.05f, 100.0f, 1.0f, 1.08f, true, 2, 2,
+          b.type == ssfilter::EqBandType::Bell ? "Q: how narrow (high) or wide (low) the band and its detector are."
+                                               : "Q: only used by the Bell type (shelves have a fixed slope, a Band Shelf uses Bandwidth)." },
     };
     if (hasBw)
         fields.push_back({ "Bandwidth", "oct", float(ssfilter::kMinBandwidthOct), float(ssfilter::kMaxBandwidthOct), 2.0f, 1.08f, true, 2, 3,

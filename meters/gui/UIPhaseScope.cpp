@@ -38,6 +38,10 @@ UIPhaseScope::UIPhaseScope()
     // size, any shape -- below kAutoCompactBelow it switches to compact
     // (updateAutoCompact()). See setCompact() for the compact view's sizes.
     getWindow().setAutoScaleBaseSize(DISTRHO_UI_DEFAULT_WIDTH, DISTRHO_UI_DEFAULT_HEIGHT);
+    // Enlarged by dragging: zoom in half steps (2, 2.5, 3, ...) -- at
+    // fractional zooms like 1.37 lines and text fall between physical
+    // pixels and look soft; the remaining space goes to the layout.
+    getWindow().setAutoScaleStep(0.5);
     setGeometryConstraints(kCompactWidth, kCompactHeight, false, true, false);
     loadSharedResources();
     fontFace(NANOVG_DEJAVU_SANS_TTF);
