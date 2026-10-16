@@ -58,9 +58,10 @@ for proj in "${PROJECTS[@]}"; do
     fi
     if [ ! -x "$script" ]; then
         echo "Note: $script is not executable -- fixing (chmod +x)."
-        chmod +x "$script"
+        chmod +x "$script" 2>/dev/null || true
     fi
-    if ( cd "$SCRIPT_DIR/$proj" && "$script" "$@" ); then
+    # Through bash, so it also runs where the bit could not be restored.
+    if ( cd "$SCRIPT_DIR/$proj" && bash "$script" "$@" ); then
         OK+=("$proj")
     else
         echo "FAILED: $proj"

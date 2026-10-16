@@ -56,6 +56,10 @@ The script runs each project's own `build_and_install.sh` in turn and
 prints a summary at the end. To build a single project, run its script
 directly, for example `./compressor/build_and_install.sh --test`.
 
+If a script answers "Permission denied" (its executable bit was lost, for
+example by a ZIP download or a file sync), start it with bash instead:
+`bash build_and_install.sh`. The scripts it calls are fixed automatically.
+
 Build output goes to `builds/<project>/`. Set `MIMOMUSIC_BUILDS_ROOT` to
 put it somewhere else. Besides the LV2 bundles, every build also produces
 VST3 bundles and standalone JACK programs in `builds/<project>/build/bin/`;

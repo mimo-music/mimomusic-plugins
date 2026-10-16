@@ -151,8 +151,12 @@ fi
 
 # DPF patches (dpf-patches/, see dpf_patches.sh there): applied for the
 # build, reverted again on exit (also on failure), so dpf/ stays upstream.
-"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" apply "$SCRIPT_DIR/dpf" "$BUILD_DIR"
-trap '"$SCRIPT_DIR/dpf-patches/dpf_patches.sh" revert "$SCRIPT_DIR/dpf" "$BUILD_DIR"' EXIT
+# Made executable if a copy or file sync dropped the bit, and run through
+# bash so it works even where that isn't possible.
+DPF_PATCHES="$SCRIPT_DIR/dpf-patches/dpf_patches.sh"
+[ -x "$DPF_PATCHES" ] || chmod +x "$DPF_PATCHES" 2>/dev/null || true
+bash "$DPF_PATCHES" apply "$SCRIPT_DIR/dpf" "$BUILD_DIR"
+trap 'bash "$DPF_PATCHES" revert "$SCRIPT_DIR/dpf" "$BUILD_DIR"' EXIT
 
 echo "-- Configuring (cmake, Release, universal $ARCHES, min macOS $MIN_MACOS) --"
 cmake -B "$BUILD_DIR" -S "$SCRIPT_DIR" -DCMAKE_BUILD_TYPE=Release \
