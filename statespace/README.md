@@ -136,7 +136,8 @@ channels equal.
   over a region to change its Ratio. **Enabled** bypasses a band's
   dynamics; **Solo** plays only the selected band.
 - **Graph**: each band's region is shaded and labelled with its threshold
-  and ratio; the selected band shows a live gain-reduction/makeup meter.
+  and ratio; every band shows a live gain-reduction/makeup meter with
+  its values, the selected band's outlined in its color.
 - **Output Gain** for both channels after all bands.
 - The `fit_multiband_compressor` tool learns all bands' gain curves from
   an example input and a compressed target recording and writes a

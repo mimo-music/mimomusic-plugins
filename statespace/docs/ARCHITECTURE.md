@@ -310,8 +310,9 @@ passes, no dynamics); a band muted by another's solo gets -100 dB.
 draw the crossover shape.
 
 Editor: `MultibandGraphWidget` (shaded band regions, crossover handles,
-split/merge by double-click, scroll for Ratio, the selected band's bipolar
-gain/makeup meter from the `kParamBandGainBase` output Parameters) and a
+split/merge by double-click, scroll for Ratio, a bipolar gain/makeup meter
+per band, the selected one highlighted, from the `kParamBandGainBase`
+output Parameters) and a
 `ParamStripWidget` retargeted at the selected band. Solo follows the
 selection. Presets `.ssmbjson`.
 

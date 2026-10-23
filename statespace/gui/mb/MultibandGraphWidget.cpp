@@ -131,134 +131,174 @@ void MultibandGraphWidget::setBandGainDb(int index, float db)
     bandGainDb_[index] = coeff * bandGainDb_[index] + (1.0f - coeff) * db;
 }
 
-// A bipolar meter -- 0dB reference in the middle, live gain filling down
+// A bipolar meter per band -- 0dB reference, live gain filling down
 // (amber/red, a cut) or up (blue/green, a boost -- possible now that a
 // band's Up Ratio can lift a quiet passage, not just reduce a loud one)
 // from it, same convention as ../compressor's own GR meter -- plus a
-// distinct, always-visible tick at the band's *configured* Makeup value,
-// separate from the live fill, so "what this band is set to add at rest"
-// stays legible even while the live number is elsewhere. Both the live
-// gain and the makeup value are also printed numerically (large, labeled
-// digits at the meter's own top/bottom, see below) plus a small dB scale
-// down the right edge. Sized and smoothed for actual readability -- see
-// setBandGainDb()'s own comment for the time-smoothing half of that fix,
-// and the call site's own comment for the size half.
-void MultibandGraphWidget::drawBandGainMeter(float x, float y, float w, float h, int band)
+// distinct, always-visible line at the band's *configured* Makeup value,
+// separate from the live fill. The live gain is printed large above the
+// bar, the makeup below it, and a dB scale runs down the bar's right side;
+// numbers and scale sit outside the bar so the fill never hides them. The
+// selected band's meter gets a border and top strip in the band's color.
+// See setBandGainDb() for the time smoothing that keeps the digits
+// readable.
+void MultibandGraphWidget::drawBandGainMeter(float x, float y, float w, float h, int band, bool selected)
 {
     if (band < 0 || band >= host_->getBandCount()) return;
     const MbBand b = host_->getBand(band);
     const double grDb = double(bandGainDb_[band]);
+    const Color c = bandColor(band);
+    // Fonts follow the width so a narrow meter's digits still fit.
+    const float fs = std::min(1.0f, w / 96.0f);
 
     beginPath();
-    rect(x, y, w, h);
-    fillColor(Color(16, 17, 20, 0.92f));
+    roundedRect(x, y, w, h, 4.0f);
+    fillColor(Color(16, 17, 20, selected ? 0.94f : 0.86f));
     fill();
-    strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    beginPath();
+    roundedRect(x, y, w, 3.0f, 1.5f);
+    fillColor(Color(c.red, c.green, c.blue, selected ? 1.0f : 0.55f));
+    fill();
+    beginPath();
+    roundedRect(x + 0.5f, y + 0.5f, w - 1.0f, h - 1.0f, 4.0f);
+    strokeColor(selected ? Color(c.red, c.green, c.blue, 0.95f) : Color(52, 56, 64));
+    strokeWidth(selected ? 2.0f : 1.0f);
     stroke();
+
+    const float hdrH = 46.0f, ftrH = 44.0f, scaleW = 28.0f;
+    const float barX = x + 8.0f;
+    const float barY = y + hdrH;
+    const float barW = w - 8.0f - scaleW;
+    const float barH = h - hdrH - ftrH;
+    if (barW <= 4.0f || barH <= 8.0f) return;
 
     auto yOf = [&](double db) {
         const double clamped = std::max(kGrMeterMinDb, std::min(kGrMeterMaxDb, db));
         const double frac = (clamped - kGrMeterMinDb) / (kGrMeterMaxDb - kGrMeterMinDb);
-        return y + float(1.0 - frac) * h;
+        return barY + float(1.0 - frac) * barH;
     };
     const float zeroY = yOf(0.0);
     const float grY = yOf(grDb);
     const float makeupY = yOf(b.makeupDb);
 
-    // See ../compressor's gui/CompressorGraphWidget.cpp's identical fix and
-    // comment for the root cause this copied: grY/zeroY were swapped
-    // relative to nvgScissor()'s (x,y,w,h) contract, so a negative height
-    // got silently clamped to 0 by nvgScissor() (nanovg.c: "w =
-    // nvg__maxf(0.0f, w)") and the gradient fill underneath never actually
-    // rendered -- the missing gain-reduction color was this, not a fresh
-    // regression from the sizing/smoothing changes above.
+    beginPath();
+    rect(barX, barY, barW, barH);
+    fillColor(Color(10, 11, 13));
+    fill();
+
+    // scissor() takes (x, y, w, h) with a positive height: a negative one
+    // is clamped to 0 by nanovg and the fill silently disappears.
     if (grDb < -0.01)
     {
-        scissor(x, std::min(grY, zeroY), w, std::fabs(zeroY - grY));
+        scissor(barX, std::min(grY, zeroY), barW, std::fabs(zeroY - grY));
         beginPath();
-        rect(x, y, w, h);
-        Paint grad = linearGradient(0, y, 0, zeroY, Color(230, 120, 70), Color(235, 195, 60));
+        rect(barX, barY, barW, barH);
+        Paint grad = linearGradient(0, barY + barH, 0, zeroY, Color(230, 120, 70), Color(235, 195, 60));
         fillPaint(grad);
         fill();
         resetScissor();
     }
     else if (grDb > 0.01)
     {
-        scissor(x, std::min(grY, zeroY), w, std::fabs(grY - zeroY));
+        scissor(barX, std::min(grY, zeroY), barW, std::fabs(grY - zeroY));
         beginPath();
-        rect(x, y, w, h);
-        Paint grad = linearGradient(0, zeroY, 0, y + h, Color(90, 190, 150), Color(70, 150, 220));
+        rect(barX, barY, barW, barH);
+        Paint grad = linearGradient(0, zeroY, 0, barY, Color(90, 190, 150), Color(70, 150, 220));
         fillPaint(grad);
         fill();
         resetScissor();
     }
 
     beginPath();
-    moveTo(x, zeroY);
-    lineTo(x + w, zeroY);
-    strokeColor(Color(90, 94, 100));
+    moveTo(barX, zeroY);
+    lineTo(barX + barW, zeroY);
+    strokeColor(Color(110, 114, 122));
     strokeWidth(1.0f);
     stroke();
 
     // Makeup gain marker.
     beginPath();
-    moveTo(x, makeupY);
-    lineTo(x + w, makeupY);
-    strokeColor(Color(160, 170, 230, 0.9f));
-    strokeWidth(1.5f);
+    moveTo(barX, makeupY);
+    lineTo(barX + barW, makeupY);
+    strokeColor(Color(170, 180, 240, 0.95f));
+    strokeWidth(2.0f);
     stroke();
 
-    // A small dB scale down the right edge -- same "give the number
-    // context, not just a bare digit" reasoning as ../compressor's own
+    // dB scale right of the bar -- same "give the number context, not just
+    // a bare digit" reasoning as ../compressor's own
     // CompressorGraphWidget::drawGrScale().
-    fillColor(Color(140, 144, 152));
-    fontSize(9.0f);
+    fontFace(NANOVG_DEJAVU_SANS_TTF);
+    fillColor(Color(150, 154, 162));
+    fontSize(10.5f);
     textAlign(ALIGN_LEFT | ALIGN_MIDDLE);
     for (double db = kGrMeterMinDb; db <= kGrMeterMaxDb + 0.01; db += 12.0)
     {
         char scaleBuf[8];
         std::snprintf(scaleBuf, sizeof(scaleBuf), "%+.0f", db);
-        text(x + w + 3.0f, yOf(db), scaleBuf, nullptr);
+        text(barX + barW + 4.0f, yOf(db), scaleBuf, nullptr);
     }
 
-    // Bigger, bolder numeric readouts -- "the numbers are changing so
-    // fast, that its difficult to read" was fixed above by smoothing
-    // setBandGainDb()'s incoming value in time; this is the other half,
-    // making the digits themselves large enough to read at a glance
-    // rather than squinting at a small corner label. Each sits on its own
-    // small dark chip (same convention as ../compressor's own
-    // CompressorGraphWidget::onNanoDisplay() "drawGrValue" chip) so the
-    // colored digits stay readable regardless of what the gradient fill
-    // underneath happens to be doing at that moment, now that the fill
-    // actually renders (see the scissor fix above).
-    beginPath();
-    roundedRect(x + 3.0f, y + 2.0f, w - 6.0f, 30.0f, 3.0f);
-    fillColor(Color(14, 15, 18, 0.72f));
-    fill();
     char grBuf[24];
     std::snprintf(grBuf, sizeof(grBuf), "%+.1f", grDb);
-    fillColor(grDb < -0.05 ? Color(235, 195, 60) : grDb > 0.05 ? Color(120, 190, 235) : Color(200, 204, 210));
-    fontSize(19.0f);
+    fillColor(grDb < -0.05 ? Color(235, 195, 60) : grDb > 0.05 ? Color(120, 190, 235) : Color(210, 214, 220));
+    fontSize(25.0f * fs);
     textAlign(ALIGN_CENTER | ALIGN_TOP);
-    text(x + w * 0.5f, y + 4.0f, grBuf, nullptr);
-    fillColor(Color(160, 164, 172));
-    fontSize(9.5f);
-    text(x + w * 0.5f, y + 25.0f, "GAIN", nullptr);
+    text(x + w * 0.5f, y + 6.0f, grBuf, nullptr);
+    fillColor(Color(165, 169, 178));
+    fontSize(11.0f);
+    text(x + w * 0.5f, y + 32.0f, "GAIN", nullptr);
 
-    beginPath();
-    roundedRect(x + 3.0f, y + h - 32.0f, w - 6.0f, 30.0f, 3.0f);
-    fillColor(Color(14, 15, 18, 0.72f));
-    fill();
     char makeupBuf[24];
     std::snprintf(makeupBuf, sizeof(makeupBuf), "%+.1f", b.makeupDb);
-    fillColor(Color(180, 188, 235));
-    fontSize(15.0f);
+    fillColor(Color(185, 193, 240));
+    fontSize(21.0f * fs);
     textAlign(ALIGN_CENTER | ALIGN_BOTTOM);
-    text(x + w * 0.5f, y + h - 15.0f, makeupBuf, nullptr);
-    fillColor(Color(150, 156, 200));
-    fontSize(9.5f);
-    text(x + w * 0.5f, y + h - 2.0f, "MAKEUP", nullptr);
+    text(x + w * 0.5f, y + h - 16.0f, makeupBuf, nullptr);
+    fillColor(Color(155, 161, 205));
+    fontSize(11.0f);
+    text(x + w * 0.5f, y + h - 3.0f, "MAKEUP", nullptr);
+}
+
+// One meter per band, centered over its region where it fits. All meters
+// share one width; where regions are narrower than that (low bands on the
+// log axis), neighbors are pushed apart just enough not to overlap, still
+// inside the graph.
+void MultibandGraphWidget::layoutBandGainMeters(int numBands)
+{
+    meterCount_ = std::max(0, std::min(numBands, ssfilter::kMaxBands));
+    if (meterCount_ == 0) return;
+
+    constexpr float kGap = 6.0f, kMaxW = 104.0f, kTop = 34.0f, kBottom = 26.0f;
+    const float left = graphX_ + 2.0f, right = graphX_ + graphW_ - 2.0f;
+    meterW_ = std::min(kMaxW, (right - left - kGap * float(meterCount_ - 1)) / float(meterCount_));
+    meterY_ = graphY_ + kTop;
+    meterH_ = std::max(130.0f, std::min(300.0f, graphH_ - kTop - kBottom));
+
+    for (int k = 0; k < meterCount_; ++k)
+    {
+        const float lo = k == 0 ? graphX_ : freqToX(host_->getCrossoverHz(k - 1));
+        const float hi = k + 1 < meterCount_ ? freqToX(host_->getCrossoverHz(k)) : graphX_ + graphW_;
+        meterX_[k] = std::max(left, std::min(right - meterW_, (lo + hi - meterW_) * 0.5f));
+    }
+    for (int k = 1; k < meterCount_; ++k)
+        meterX_[k] = std::max(meterX_[k], meterX_[k - 1] + meterW_ + kGap);
+    meterX_[meterCount_ - 1] = std::min(meterX_[meterCount_ - 1], right - meterW_);
+    for (int k = meterCount_ - 2; k >= 0; --k)
+        meterX_[k] = std::min(meterX_[k], meterX_[k + 1] - meterW_ - kGap);
+}
+
+int MultibandGraphWidget::meterAt(double px, double py) const
+{
+    if (py < meterY_ || py >= meterY_ + meterH_) return -1;
+    for (int k = 0; k < meterCount_; ++k)
+        if (px >= meterX_[k] && px < meterX_[k] + meterW_) return k;
+    return -1;
+}
+
+int MultibandGraphWidget::bandAt(double px, double py) const
+{
+    const int m = meterAt(px, py);
+    return m >= 0 ? m : bandRegionAt(px);
 }
 
 void MultibandGraphWidget::onNanoDisplay()
@@ -338,27 +378,6 @@ void MultibandGraphWidget::onNanoDisplay()
         fontSize(9.5f);
         fillColor(Color(200, 204, 210, 0.75f));
         text((lo + hi) * 0.5f, graphY_ + 20.0f, sub, nullptr);
-    }
-
-    // Gain-reduction/makeup meter for the selected band -- "graphically
-    // and numerically", see drawBandGainMeter()'s own comment. Only the
-    // selected band's, not all of them at once, to stay legible with up
-    // to kMaxBands crammed onto one graph -- the same "select then see
-    // detail" split this plugin's own field strip already uses.
-    if (selectedBand_ >= 0 && selectedBand_ < numBands)
-    {
-        const float slo = selectedBand_ == 0 ? graphX_ : freqToX(host_->getCrossoverHz(selectedBand_ - 1));
-        const float shi = selectedBand_ + 1 < numBands ? freqToX(host_->getCrossoverHz(selectedBand_)) : graphX_ + graphW_;
-        // Grown from 56x84 -- "bigger display of gainreduction, and makeup
-        // gain" -- see drawBandGainMeter()'s own comment for the rest of
-        // that fix (smoothing + larger fonts). kScaleW reserves room for
-        // the dB scale drawn just past the meter's right edge so it can't
-        // get clipped against the graph's own right boundary.
-        constexpr float meterW = 76.0f, meterH = 128.0f, kScaleW = 26.0f;
-        float mx = (slo + shi) * 0.5f - meterW * 0.5f;
-        mx = std::max(graphX_ + 2.0f, std::min(graphX_ + graphW_ - meterW - kScaleW - 2.0f, mx));
-        const float my = graphY_ + 34.0f;
-        drawBandGainMeter(mx, my, meterW, meterH, selectedBand_);
     }
 
     strokeColor(Color(48, 51, 58));
@@ -536,6 +555,14 @@ void MultibandGraphWidget::onNanoDisplay()
         fill();
     }
 
+    // Every band's gain-reduction/makeup meter, the selected one
+    // highlighted -- see drawBandGainMeter(). Drawn over the spectrum and
+    // crossover lines so the numbers stay readable; the crossover handles
+    // stay reachable above and below them.
+    layoutBandGainMeters(numBands);
+    for (int k = 0; k < meterCount_; ++k)
+        drawBandGainMeter(meterX_[k], meterY_, meterW_, meterH_, k, k == selectedBand_);
+
     // Frequency readout near whichever crossover split is being dragged or
     // merely hovered -- the same "show it while pointing, not just while
     // dragging" convention EqGraphWidget/DynEqGraphWidget's node readouts
@@ -607,9 +634,12 @@ bool MultibandGraphWidget::onMouse(const MouseEvent& ev)
             return true;
         }
 
-        const int band = bandRegionAt(x);
+        const int band = bandAt(x, y);
         if (band >= 0)
         {
+            // A click on a meter only selects -- double-clicking it must not
+            // split the band underneath, which may be a neighbor's.
+            const bool onMeter = meterAt(x, y) >= 0;
             const auto now = std::chrono::steady_clock::now();
             constexpr std::chrono::milliseconds kDoubleClickWindow(400);
             const bool isDoubleClick = band == lastClickBand_ && lastClickHandle_ == -1 &&
@@ -618,7 +648,7 @@ bool MultibandGraphWidget::onMouse(const MouseEvent& ev)
             lastClickHandle_ = -1;
             lastClickTime_ = now;
 
-            if (isDoubleClick)
+            if (isDoubleClick && !onMeter)
             {
                 host_->addCrossover(xToFreq(float(x)));
                 repaint();
@@ -660,7 +690,7 @@ bool MultibandGraphWidget::onMotion(const MotionEvent& ev)
 
 bool MultibandGraphWidget::onScroll(const ScrollEvent& ev)
 {
-    const int band = bandRegionAt(ev.pos.getX());
+    const int band = bandAt(ev.pos.getX(), ev.pos.getY());
     if (band < 0) return false;
 
     const double dir = ev.delta.getY() > 0.0 ? 1.0 : (ev.delta.getY() < 0.0 ? -1.0 : 0.0);

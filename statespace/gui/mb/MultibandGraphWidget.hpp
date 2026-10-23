@@ -37,8 +37,9 @@
 // UIEq feeds EqGraphWidget.
 //
 // Simpler than EqGraphWidget: no right-click context menu (there is no
-// band *type* to pick -- every band is the same kind of compressor). The
-// selected band's live gain/makeup is shown by drawBandGainMeter().
+// band *type* to pick -- every band is the same kind of compressor). Every
+// band's live gain/makeup is shown by drawBandGainMeter(), the selected
+// band's meter outlined in its color.
 
 #pragma once
 
@@ -74,8 +75,8 @@ public:
     // getBandGainDb(), arriving via a DPF output Parameter (see
     // PluginMbCompressor.hpp's kParamBandGainBase comment) -- potentially
     // once per audio block, i.e. far faster than the eye can read a
-    // changing number. Drives the bipolar gain-reduction/makeup meter
-    // drawn for the currently-selected band (see onNanoDisplay()); smooths
+    // changing number. Drives each band's bipolar gain-reduction/makeup
+    // meter (see onNanoDisplay()); smooths
     // the raw incoming value in time (not just redraw-rate-limited) before
     // storing it, see the .cpp definition's own comment.
     void setBandGainDb(int index, float db);
@@ -99,7 +100,10 @@ private:
 
     int handleAt(double px, double py) const;   // nearest crossover split line within hit distance, else -1
     int bandRegionAt(double px) const;           // which band's region an x position falls in
-    void drawBandGainMeter(float x, float y, float w, float h, int band);
+    int meterAt(double px, double py) const;     // which band's gain meter is under a point, else -1
+    int bandAt(double px, double py) const;      // meterAt(), else bandRegionAt()
+    void layoutBandGainMeters(int numBands);
+    void drawBandGainMeter(float x, float y, float w, float h, int band, bool selected);
 
     ssgui::IMbEditorHost* host_;
     double sampleRate_ = 48000.0;
@@ -138,6 +142,13 @@ private:
     std::chrono::steady_clock::time_point bandGainSmoothUpdated_[ssfilter::kMaxBands]{};
     bool bandGainSmoothInit_[ssfilter::kMaxBands] = {}; // false until the first sample, see setBandGainDb()
     static constexpr double kGrMeterMinDb = -24.0, kGrMeterMaxDb = 12.0; // bipolar, same convention as ../compressor's own GR meter
+
+    // Each band's meter rectangle, from layoutBandGainMeters() -- a narrow
+    // band's meter may sit partly over its neighbor, so clicks and scrolls
+    // on a meter go to the meter's band, see bandAt().
+    float meterX_[ssfilter::kMaxBands] = {};
+    float meterY_ = 0, meterW_ = 0, meterH_ = 0;
+    int meterCount_ = 0;
 };
 
 END_NAMESPACE_DGL
