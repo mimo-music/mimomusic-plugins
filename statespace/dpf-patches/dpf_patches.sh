@@ -22,6 +22,9 @@
 #                                   when the UI resizes itself
 #   0002-autoscale-base-size.patch  automatic scaling relative to a design
 #                                   size, so the minimum size can be smaller
+#   0003-pointer-leave.patch        the pointer leaving the window reaches the
+#                                   widgets (as a motion far outside), so hover
+#                                   lines and readouts disappear
 set -euo pipefail
 
 MODE="${1:?apply|revert}"

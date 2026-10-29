@@ -591,6 +591,16 @@ void DynEqGraphWidget::onNanoDisplay()
     text(autoscaleLabelX_ + autoscaleLabelW_ * 0.5f, autoscaleLabelY_ + autoscaleLabelH_ * 0.5f + 1.0f,
          spectrumAutoscale_ ? "Autoscale" : "Fixed Range", nullptr);
 
+    // Pointer readout over an empty spot: the frequency and gain a click
+    // there gives the new band (see onMouse()'s addBand()).
+    if (cursorReadoutShown())
+    {
+        char buf[48];
+        std::snprintf(buf, sizeof(buf), "%s   %+.1fdB", formatFreqLabel(xToFreq(cursor_.x())).c_str(),
+                      yToGain(cursor_.y()));
+        cursor_.draw(*this, graphX_, graphY_, graphW_, graphH_, buf);
+    }
+
     // Freq/gain/Q readout above whichever node is being dragged *or*
     // merely hovered -- see EqGraphWidget.cpp's identical comment. For a
     // band with dynamics on, a second line always shows its *live*
@@ -658,6 +668,18 @@ void DynEqGraphWidget::onNanoDisplay()
 }
 
 // ---- interaction ------------------------------------------------------
+
+bool DynEqGraphWidget::cursorReadoutShown() const
+{
+    if (!cursor_.visible() || dragBand_ >= 0 || rangeLabelPressed_) return false;
+    const float x = cursor_.x(), y = cursor_.y();
+    auto inside = [x, y](float rx, float ry, float rw, float rh) { return x >= rx && x < rx + rw && y >= ry && y < ry + rh; };
+    if (!inside(graphX_, graphY_, graphW_, graphH_)) return false;
+    if (inside(rangeLabelX_, rangeLabelY_, rangeLabelW_, rangeLabelH_)
+        || inside(autoscaleLabelX_, autoscaleLabelY_, autoscaleLabelW_, autoscaleLabelH_))
+        return false;
+    return nodeAt(x, y) < 0;
+}
 
 bool DynEqGraphWidget::onMouse(const MouseEvent& ev)
 {
@@ -769,8 +791,9 @@ bool DynEqGraphWidget::onMotion(const MotionEvent& ev)
 
     const int prevHover = hoverBand_;
     const bool inGraph = x >= graphX_ && x < graphX_ + graphW_ && y >= graphY_ && y < graphY_ + graphH_;
+    const bool cursorChanged = inGraph ? cursor_.track(float(x), float(y)) : cursor_.hide();
     hoverBand_ = inGraph ? nodeAt(x, y) : -1;
-    if (hoverBand_ != prevHover) repaint();
+    if (hoverBand_ != prevHover || cursorChanged) repaint();
     return false;
 }
 

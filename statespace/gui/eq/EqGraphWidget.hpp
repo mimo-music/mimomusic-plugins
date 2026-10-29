@@ -66,6 +66,7 @@
 
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "EqEditorHost.hpp"
+#include "../CursorReadout.hpp"
 #include "../EditorSubWidget.hpp"
 
 #include <chrono>
@@ -255,6 +256,10 @@ private:
 
     int selectedBand_ = -1;
     int hoverBand_ = -1;
+    // Pointer frequency/gain readout over an empty spot of the graph, see
+    // CursorReadout.hpp; cursorReadoutShown() decides when it is drawn.
+    CursorReadout cursor_;
+    bool cursorReadoutShown() const;
     int dragBand_ = -1;
     int dragEdge_ = 0; // what dragBand_'s drag moves: 0 = the node itself, 1/2 = a Band Shelf corner handle, see edgeHandleAt()
 

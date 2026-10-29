@@ -269,7 +269,9 @@ to add a band, drag nodes (gain-less types move only horizontally), scroll
 for Q (BW for a Band Shelf, whose corner handles also drag the
 bandwidth), double-click or Delete to remove, right-click menu (delete,
 duplicate, type, slope, harmonic twin, unlink), right-button drag to
-audition while held, a value readout on hover and drag, the gain range
+audition while held, a value readout on hover and drag, a pointer
+readout (frequency and gain under the pointer, over empty graph; shared
+`gui/CursorReadout.hpp`, also used by both Dynamic EQ graphs), the gain range
 label (click to cycle, drag for 1–40 dB), channel rings and per-channel
 curves, and the crossfeed level controls. `BandListWidget`: one row per
 band with type, EN, SOLO, channel, FREQ, BW, GAIN, Q and delete; values

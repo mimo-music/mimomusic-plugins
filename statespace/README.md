@@ -79,7 +79,9 @@ processors on top of it.
 
 - **Bands**: click the graph to add a band, drag it (frequency and gain),
   scroll over it for Q (or BW for a Band Shelf). Hovering or dragging
-  shows its values. Up to 32 bands (the filter's 128-state limit).
+  shows its values. Over an empty spot, a thin line and a label show the
+  frequency and gain under the pointer -- where a click puts the new band
+  (also in both Dynamic EQs). Up to 32 bands (the filter's 128-state limit).
 - **Types**: Bell, Low Shelf, High Shelf, Low Pass, High Pass, Notch,
   Band Pass, All Pass, and **Band Shelf**. Low/High Pass have a slope of
   12, 24, 36 or 48 dB/octave (in the right-click menu, or by clicking the
@@ -233,13 +235,15 @@ installs them into `~/Library/Audio/Plug-Ins/`.
 
 ### DPF patches
 
-`dpf/` is the official DPF, unchanged. `dpf-patches/` holds two small
+`dpf/` is the official DPF, unchanged. `dpf-patches/` holds three small
 patches the build scripts apply before building and revert afterwards
 (`dpf-patches/dpf_patches.sh`): LV2 editors ask the host to resize
-(`ui:resize`) when they resize themselves, and automatic scaling can be
+(`ui:resize`) when they resize themselves; automatic scaling can be
 relative to a design size, so editors can be made smaller than it, and
 enlarged in half zoom steps (2x, 2.5x, ... -- fractional zooms such as
-1.37x look soft; the extra space goes to the layout). A plain
+1.37x look soft; the extra space goes to the layout); and the pointer
+leaving the editor reaches the widgets, so hover lines and readouts
+disappear (DPF ignores it). A plain
 `cmake` build without the scripts needs them applied first:
 `dpf-patches/dpf_patches.sh apply dpf <some-state-dir>`.
 

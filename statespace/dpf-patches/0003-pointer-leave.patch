@@ -1,0 +1,46 @@
+--- a/dgl/src/WindowPrivateData.hpp
++++ b/dgl/src/WindowPrivateData.hpp
+@@ -64,6 +64,10 @@
+     /** Whether this Window is embed into another (usually not DGL-controlled) Window. */
+     const bool isEmbed;
+ 
++    /** MimoMusic patch (dpf-patches/0003): mouse buttons currently held, so a pointer-out
++        during a drag is not reported as the pointer leaving (see PUGL_POINTER_OUT). */
++    uint buttonsHeld = 0;
++
+     /** Whether to schedule repaints on the next idle call, used for AU */
+     const bool usesScheduledRepaints;
+ 
+--- a/dgl/src/WindowPrivateData.cpp
++++ b/dgl/src/WindowPrivateData.cpp
+@@ -1099,6 +1099,19 @@
+         break;
+     ///< Pointer left view, a #PuglCrossingEvent
+     case PUGL_POINTER_OUT:
++        // MimoMusic patch (dpf-patches/0003): tell the widgets the pointer has left, as a motion
++        // far outside every widget, so hover lines and readouts don't stay behind. Not while a
++        // button is held: a drag keeps receiving motion outside the window and must not jump.
++        if (event->crossing.mode == PUGL_CROSSING_NORMAL && pData->buttonsHeld == 0)
++        {
++            Widget::MotionEvent ev;
++            ev.mod   = event->crossing.state;
++            ev.flags = event->crossing.flags;
++            ev.time  = d_roundToUnsignedInt(event->crossing.time * 1000.0);
++            ev.pos   = Point<double>(-1.0e6, -1.0e6);
++            ev.absolutePos = ev.pos;
++            pData->onPuglMotion(ev);
++        }
+         break;
+ 
+     ///< Mouse button pressed, a #PuglButtonEvent
+@@ -1112,6 +1125,10 @@
+         ev.time   = d_roundToUnsignedInt(event->button.time * 1000.0);
+         ev.button = event->button.button + 1;
+         ev.press  = event->type == PUGL_BUTTON_PRESS;
++        if (ev.press)
++            ++pData->buttonsHeld;
++        else if (pData->buttonsHeld > 0)
++            --pData->buttonsHeld;
+         if (pData->autoScaling && 0)
+         {
+             const double scaleFactor = pData->autoScaleFactor;

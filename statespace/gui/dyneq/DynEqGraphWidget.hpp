@@ -34,6 +34,7 @@
 
 #include "../../plugin/dsp/SpectrumAnalyzer.hpp"
 #include "DynEqEditorHost.hpp"
+#include "../CursorReadout.hpp"
 #include "../EditorSubWidget.hpp"
 
 #include <chrono>
@@ -116,6 +117,10 @@ private:
 
     int selectedBand_ = -1;
     int hoverBand_ = -1;
+    // Pointer frequency/gain readout over an empty spot of the graph, see
+    // CursorReadout.hpp; cursorReadoutShown() decides when it is drawn.
+    CursorReadout cursor_;
+    bool cursorReadoutShown() const;
     int dragBand_ = -1;
 
     int lastClickBand_ = -1;
