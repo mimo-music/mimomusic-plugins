@@ -20,10 +20,21 @@
 // A widget must derive from this class (not NanoSubWidget directly) or it
 // is not drawn at all; it is constructed directly on its editor (a
 // NanoTopLevelWidget*), which makes it share the editor's context.
+//
+// Pixel grid: at a zoom such as 1.5x, a widget at an odd logical position
+// would start half a device pixel off, blurring every line and glyph in
+// it -- some widgets sharp, others not, depending on where they sit and on
+// the window size. paintIntoEditorFrame() therefore rounds the widget's
+// origin to a whole device pixel (at most a third of a logical pixel, not
+// visible, clicks unaffected). snapLine() and lineWidth() keep 1px lines
+// on whole device pixels inside a widget.
 
 #pragma once
 
 #include "NanoVG.hpp"
+
+#include <algorithm>
+#include <cmath>
 
 START_NAMESPACE_DGL
 
@@ -34,10 +45,37 @@ public:
 
     void paintIntoEditorFrame()
     {
+        const float r = pixelRatio();
         save();
-        translate(float(getAbsoluteX()), float(getAbsoluteY()));
+        translate(std::round(float(getAbsoluteX()) * r) / r, std::round(float(getAbsoluteY()) * r) / r);
         onNanoDisplay();
         restore();
+    }
+
+    // Device pixels per logical pixel (window size / editor size): 1
+    // unzoomed, 1.5 or 2 zoomed -- the same value editorPixelRatio() gives
+    // the editor's frame.
+    float pixelRatio() const
+    {
+        const auto* const top = getTopLevelWidget();
+        return top != nullptr && top->getWidth() > 0 ? float(getWindow().getWidth()) / float(top->getWidth()) : 1.0f;
+    }
+
+    // Stroke width `w` rounded to whole device pixels (at least one).
+    float lineWidth(float w = 1.0f) const
+    {
+        const float r = pixelRatio();
+        return std::max(1.0f, std::round(w * r)) / r;
+    }
+
+    // Where to put a horizontal or vertical line meant at local coordinate
+    // `v` so that, with lineWidth(w), it covers whole device pixels: on a
+    // pixel centre for an odd device width, on a pixel edge for an even one.
+    float snapLine(float v, float w = 1.0f) const
+    {
+        const float r = pixelRatio();
+        const int dw = int(std::max(1.0f, std::round(w * r)));
+        return (dw % 2 != 0 ? std::floor(v * r) + 0.5f : std::round(v * r)) / r;
     }
 };
 

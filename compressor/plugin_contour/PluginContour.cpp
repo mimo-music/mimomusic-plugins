@@ -641,6 +641,12 @@ void PluginContour::initState(uint32_t index, State& state)
         state.hints = 0; // UI convenience only, the DSP side never reads this
         state.defaultValue = "";
         break;
+    case kStateGrMeterSpeed:
+        state.key = "grMeterSpeed";
+        state.label = "GR Meter Speed (Fast/Slow)";
+        state.hints = 0; // UI preference only, the DSP side never reads this
+        state.defaultValue = "0"; // Fast
+        break;
     // A/B compare, made permanent -- see StateIndex's own comment.
     case kStateAbSlotA:
         state.key = "abSlotA"; state.label = "A/B Slot A"; state.hints = 0; state.defaultValue = "";
@@ -945,6 +951,7 @@ void PluginContour::activate()
     peakInL_.reset(); peakInR_.reset(); peakOutL_.reset(); peakOutR_.reset();
     scFilterL_.reset(); scFilterR_.reset();
     scMonitorPeakL_.reset(); scMonitorPeakR_.reset();
+    grMeterA_.reset(); grMeterB_.reset();
     std::fill(lookaheadRing_.begin(), lookaheadRing_.end(), 0.0);
 }
 
@@ -1034,6 +1041,7 @@ void PluginContour::run(const float** inputs, float** outputs, uint32_t frames)
         meterInputRmsR_ = float(loudnessInR_.rmsDb());  meterInputPeakR_ = float(peakInR_.peakDb());
         meterOutputRmsL_ = float(loudnessOutL_.rmsDb()); meterOutputPeakL_ = float(peakOutL_.peakDb());
         meterOutputRmsR_ = float(loudnessOutR_.rmsDb()); meterOutputPeakR_ = float(peakOutR_.peakDb());
+        grMeterA_.reset(); grMeterB_.reset();
         meterGainReductionA_ = meterGainReductionB_ = 0.0f;
         meterTrailA_ = meterTrailB_ = sscomp::packTrailPair(-120.0, 0.0);
         for (uint32_t k = 0; k < kTrailBankSize; ++k) meterTrailBankA_[k] = meterTrailBankB_[k] = meterTrailA_;
@@ -1230,6 +1238,8 @@ void PluginContour::run(const float** inputs, float** outputs, uint32_t frames)
             ++trailSlot;
         }
         lastVoiceInA = voiceInA; lastVoiceInB = voiceInB;
+        grMeterA_.process(voiceA_.gainDb());
+        grMeterB_.process(voiceB_.gainDb());
 
         peakInL_.process(std::fabs(meterInRawL));
         peakInR_.process(std::fabs(meterInRawR));
@@ -1283,8 +1293,8 @@ void PluginContour::run(const float** inputs, float** outputs, uint32_t frames)
     meterOutputRmsR_ = float(loudnessOutR_.rmsDb()); meterOutputPeakR_ = float(peakOutR_.peakDb());
     meterDetectorA_ = float(voiceA_.detectorLevelDb());
     meterDetectorB_ = float(voiceB_.detectorLevelDb());
-    meterGainReductionA_ = float(voiceA_.gainDb());
-    meterGainReductionB_ = (stereoMode_ == StereoMode::Linked) ? meterGainReductionA_ : float(voiceB_.gainDb());
+    meterGainReductionA_ = float(grMeterA_.gainDb());
+    meterGainReductionB_ = (stereoMode_ == StereoMode::Linked) ? meterGainReductionA_ : float(grMeterB_.gainDb());
     // Both numbers of each pair from the SAME sample, in one value -- see
     // kParamMeterTrailA.
     meterTrailA_ = trailPair(voiceA_, lastVoiceInA);
@@ -1298,6 +1308,7 @@ void PluginContour::sampleRateChanged(double newSampleRate)
     loudnessInL_.prepare(newSampleRate); loudnessInR_.prepare(newSampleRate);
     loudnessOutL_.prepare(newSampleRate); loudnessOutR_.prepare(newSampleRate);
     peakInL_.prepare(newSampleRate); peakInR_.prepare(newSampleRate);
+    grMeterA_.prepare(newSampleRate); grMeterB_.prepare(newSampleRate);
     peakOutL_.prepare(newSampleRate); peakOutR_.prepare(newSampleRate);
     scFilterL_.prepare(newSampleRate); scFilterR_.prepare(newSampleRate);
     updateScFilterFrequencies();

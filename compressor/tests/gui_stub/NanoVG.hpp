@@ -40,9 +40,6 @@ struct Color
     Color withAlpha(float a) const { Color c = *this; c.alpha = a; return c; }
 };
 
-enum Align { ALIGN_LEFT = 1, ALIGN_CENTER = 2, ALIGN_RIGHT = 4, ALIGN_TOP = 8, ALIGN_MIDDLE = 16, ALIGN_BOTTOM = 32, ALIGN_BASELINE = 64 };
-inline int operator|(Align a, Align b) { return int(a) | int(b); }
-
 enum Modifier { kModifierShift = 1, kModifierControl = 2, kModifierAlt = 4, kModifierSuper = 8 };
 enum { kMouseButtonRight = 3 };
 constexpr const char* NANOVG_DEJAVU_SANS_TTF = "dejavu";
@@ -54,29 +51,18 @@ struct ScrollEvent { Point<double> pos; Point<double> delta; uint32_t mod = 0; }
 struct Paint {};
 template <typename T> struct Rectangle { T x{}, y{}, w{}, h{}; T getWidth() const { return w; } T getHeight() const { return h; } };
 
-struct FakeWindow { void focus() {} };
+struct FakeWindow { void focus() {} unsigned getWidth() const { return 800; } };
 
 struct Widget { virtual ~Widget() = default; };
 // Widget constructors take the editor as a NanoTopLevelWidget* (shared NanoVG
 // context, see the UI constructors); in the stub any Widget will do.
 using NanoTopLevelWidget = Widget;
 
-// The NanoSubWidget surface the widgets use. Size is settable by the test.
-struct NanoSubWidget : Widget
+// The drawing surface (DGL's NanoVG; NanoSubWidget is one, and helpers such as
+// GrSpeedSwitch draw into a NanoVG&). Align is a member enum, as in DGL.
+struct NanoVG
 {
-    explicit NanoSubWidget(Widget*) {}
-    void save() {}
-    void restore() {}
-    void translate(float, float) {}
-    int getAbsoluteX() const { return 0; }
-    int getAbsoluteY() const { return 0; }
-    // sizing / repaint
-    double w_ = 800, h_ = 600;
-    unsigned getWidth() const { return unsigned(w_); }
-    unsigned getHeight() const { return unsigned(h_); }
-    void repaint() {}
-    FakeWindow& getWindow() { static FakeWindow fw; return fw; }
-    void loadSharedResources() {}
+    enum Align { ALIGN_LEFT = 1, ALIGN_CENTER = 2, ALIGN_RIGHT = 4, ALIGN_TOP = 8, ALIGN_MIDDLE = 16, ALIGN_BOTTOM = 32, ALIGN_BASELINE = 64 };
     // drawing: all no-ops
     void beginPath() {}
     void rect(float, float, float, float) {}
@@ -99,6 +85,28 @@ struct NanoSubWidget : Widget
     void resetScissor() {}
     void fillPaint(const Paint&) {}
     template <typename... A> Paint linearGradient(A&&...) { return Paint(); }
+};
+inline int operator|(NanoVG::Align a, NanoVG::Align b) { return int(a) | int(b); }
+
+// The NanoSubWidget surface the widgets use. Size is settable by the test.
+struct NanoSubWidget : Widget, NanoVG
+{
+    explicit NanoSubWidget(Widget*) {}
+    void save() {}
+    void restore() {}
+    void translate(float, float) {}
+    int getAbsoluteX() const { return 0; }
+    int getAbsoluteY() const { return 0; }
+    // sizing / repaint
+    double w_ = 800, h_ = 600;
+    unsigned getWidth() const { return unsigned(w_); }
+    unsigned getHeight() const { return unsigned(h_); }
+    void repaint() {}
+    FakeWindow& getWindow() const { static FakeWindow fw; return fw; }
+    // pixelRatio() == 1: the fake window and top-level widget are the same width.
+    struct FakeTop { unsigned getWidth() const { return 800; } };
+    const FakeTop* getTopLevelWidget() const { static FakeTop t; return &t; }
+    void loadSharedResources() {}
     virtual void onNanoDisplay() {}
     virtual bool onMouse(const MouseEvent&) { return false; }
     virtual bool onMotion(const MotionEvent&) { return false; }

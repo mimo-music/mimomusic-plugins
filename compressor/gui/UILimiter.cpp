@@ -94,6 +94,7 @@ UILimiter::UILimiter()
     graph_->setClipKneeRange(0.1f, 6.0f);
     graph_->setOnThresholdChanged([this](float v) { onGraphParamChanged(kParamThreshold, v); });
     graph_->setOnCeilingChanged([this](float v) { onGraphParamChanged(kParamCeiling, v); });
+    graph_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graph_->setOnClipKneeChanged([this](float v) { onGraphParamChanged(kParamClipKnee, v); });
 
     strip_ = new ParamStripWidget(this);
@@ -229,6 +230,7 @@ UILimiter::UILimiter()
     tooltip_->addTarget(btnOversampling_, "Oversampling (4x): also detects peaks between samples (inter-sample peaks), which can exceed the Ceiling after D/A conversion or MP3/AAC encoding. Useful when the Ceiling is close to 0 dBFS. Adds 0.25 ms of latency and costs more CPU; off costs nothing extra.");
     // Hover descriptions for the parameter fields.
     tooltip_->addFieldTarget(strip_, [this](double x, double y) { return strip_->fieldTooltipAt(x, y); });
+    tooltip_->addFieldTarget(graph_, [this](double x, double y) { return graph_->tooltipAt(x, y); });
 
     layout();
 }
@@ -530,8 +532,17 @@ void UILimiter::parameterChanged(uint32_t index, float value)
     repaint();
 }
 
+// The GR meter's Fast/Slow switch: one setting for every graph in this
+// editor, saved with the session as the "grMeterSpeed" State.
+void UILimiter::setGrMeterSpeed(DGL_NAMESPACE::GrMeterSpeed s, bool save)
+{
+    graph_->setGrMeterSpeed(s);
+    if (save) setState("grMeterSpeed", DGL_NAMESPACE::grMeterSpeedStateValue(s));
+}
+
 void UILimiter::stateChanged(const char* key, const char* value)
 {
+    if (std::strcmp(key, "grMeterSpeed") == 0) { setGrMeterSpeed(DGL_NAMESPACE::grMeterSpeedFromState(value), false); return; }
     if (std::strcmp(key, "presetDir") == 0) { lastPresetDir_ = value; return; }
     if (std::strcmp(key, "algorithm") == 0)
     {

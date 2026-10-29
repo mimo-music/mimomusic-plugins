@@ -340,6 +340,9 @@ enum StateIndex
     // two-way choice, same State (not Parameter) convention as
     // kStateStereoMode.
     kStateLinkAB,
+    // GR meter speed in the editor, "0"=Fast/"1"=Slow (UI preference only,
+    // the DSP never reads it -- same as presetDir).
+    kStateGrMeterSpeed,
     kStateCount
 };
 
@@ -444,6 +447,7 @@ private:
     sscomp::CurveVoice voiceA_, voiceB_;
     sscomp::LoudnessMeter loudnessInL_, loudnessInR_, loudnessOutL_, loudnessOutR_;
     sscomp::PeakMeter peakInL_, peakInR_, peakOutL_, peakOutR_;
+    sscomp::GrPeakMeter grMeterA_, grMeterB_; // the GR readouts -- see its own comment
     sscomp::TransferCurve curve_;
     // B's own independent curve -- see kParamCurvePointCountB's own
     // comment. Defaults identical to curve_'s own default (a plain 2-point

@@ -413,6 +413,12 @@ void PluginCompressorStereo::initState(uint32_t index, State& state)
         state.hints = 0; // UI convenience only, the DSP side never reads this
         state.defaultValue = "";
         break;
+    case kStateGrMeterSpeed:
+        state.key = "grMeterSpeed";
+        state.label = "GR Meter Speed (Fast/Slow)";
+        state.hints = 0; // UI preference only, the DSP side never reads this
+        state.defaultValue = "0"; // Fast
+        break;
     }
 }
 
@@ -578,6 +584,7 @@ void PluginCompressorStereo::activate()
     peakInL_.reset(); peakInR_.reset(); peakOutL_.reset(); peakOutR_.reset();
     scFilterL_.reset(); scFilterR_.reset();
     scMonitorPeakL_.reset(); scMonitorPeakR_.reset();
+    grMeterA_.reset(); grMeterB_.reset();
 }
 
 void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t frames)
@@ -646,6 +653,7 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
         meterInputRmsR_ = float(loudnessInR_.rmsDb());  meterInputPeakR_ = float(peakInR_.peakDb());
         meterOutputRmsL_ = float(loudnessOutL_.rmsDb()); meterOutputPeakL_ = float(peakOutL_.peakDb());
         meterOutputRmsR_ = float(loudnessOutR_.rmsDb()); meterOutputPeakR_ = float(peakOutR_.peakDb());
+        grMeterA_.reset(); grMeterB_.reset();
         meterGainReductionA_ = meterGainReductionB_ = 0.0f;
         return;
     }
@@ -934,6 +942,9 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
             peakOutR_.process(std::fabs(yR));
         }
 
+        grMeterA_.process(voiceA_.gainReductionDb());
+        grMeterB_.process(voiceB_.gainReductionDb());
+
         outL[i] = float(yL);
         outR[i] = float(yR);
     }
@@ -950,8 +961,8 @@ void PluginCompressorStereo::run(const float** inputs, float** outputs, uint32_t
     meterOutputRmsR_ = float(loudnessOutR_.rmsDb()); meterOutputPeakR_ = float(peakOutR_.peakDb());
     meterDetectorA_ = float(voiceA_.detectorLevelDb());
     meterDetectorB_ = float(voiceB_.detectorLevelDb());
-    meterGainReductionA_ = float(voiceA_.gainReductionDb());
-    meterGainReductionB_ = (stereoMode_ == StereoMode::Linked) ? meterGainReductionA_ : float(voiceB_.gainReductionDb());
+    meterGainReductionA_ = float(grMeterA_.gainDb());
+    meterGainReductionB_ = (stereoMode_ == StereoMode::Linked) ? meterGainReductionA_ : float(grMeterB_.gainDb());
 }
 
 void PluginCompressorStereo::sampleRateChanged(double newSampleRate)
@@ -965,6 +976,7 @@ void PluginCompressorStereo::sampleRateChanged(double newSampleRate)
     scFilterL_.prepare(newSampleRate); scFilterR_.prepare(newSampleRate);
     updateScFilterFrequencies();
     scMonitorPeakL_.prepare(newSampleRate); scMonitorPeakR_.prepare(newSampleRate);
+    grMeterA_.prepare(newSampleRate); grMeterB_.prepare(newSampleRate);
     scMonitorSpectrumIn_.prepare(newSampleRate); scMonitorSpectrumOut_.prepare(newSampleRate);
 }
 

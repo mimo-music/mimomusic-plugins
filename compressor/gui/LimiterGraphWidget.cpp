@@ -28,25 +28,12 @@ void LimiterGraphWidget::setCurveParams(const CurveParams& p)
 void LimiterGraphWidget::setLiveLevels(float detectorLevelDb, float gainReductionDb, float clipDb)
 {
     detectorLevelDb_ = detectorLevelDb;
+    markerGrDb_ = gainReductionDb;
 
-    // Smoothed against wall-clock time so the number stays readable (same
-    // time constant as CompressorGraphWidget's). The peak-hold below uses
-    // the raw value.
-    if (!grSmoothInit_)
-    {
-        gainReductionDb_ = gainReductionDb;
-        grSmoothInit_ = true;
-        grSmoothUpdated_ = std::chrono::steady_clock::now();
-    }
-    else
-    {
-        const auto smoothNow = std::chrono::steady_clock::now();
-        const float smoothDtSec = std::chrono::duration<float>(smoothNow - grSmoothUpdated_).count();
-        grSmoothUpdated_ = smoothNow;
-        constexpr float kTauSec = 0.22f;
-        const float coeff = smoothDtSec > 0.0f ? std::exp(-smoothDtSec / kTauSec) : 1.0f;
-        gainReductionDb_ = coeff * gainReductionDb_ + (1.0f - coeff) * gainReductionDb;
-    }
+    // The bar and the number: Fast/Slow ballistics, see
+    // GrMeterBallistics.hpp. The peak-hold below uses the raw value.
+    grSmoother_.process(gainReductionDb, grSpeed_);
+    gainReductionDb_ = grSmoother_.value();
 
     // Peak-hold: snap to a deeper cut, hold kGrHoldTimeSec, then recover.
     const auto now = std::chrono::steady_clock::now();
@@ -140,12 +127,11 @@ void dashedLine(Ctx& c, float x0, float y0, float x1, float y1, float dash, floa
 
 void LimiterGraphWidget::drawTransferCurve(float x, float y, float w, float h)
 {
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(18, 19, 23));
     fill();
     strokeColor(Color(48, 51, 58));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     fontFace(NANOVG_DEJAVU_SANS_TTF);
@@ -166,12 +152,7 @@ void LimiterGraphWidget::drawTransferCurve(float x, float y, float w, float h)
         text(px, y + h + 1.0f, buf, nullptr);
 
         const float py = dbToPxY(db);
-        beginPath();
-        moveTo(x, py);
-        lineTo(x + w, py);
-        strokeColor(Color(40, 43, 50));
-        strokeWidth(1.0f);
-        stroke();
+        crispHLine(*this, x, x + w, py, 1.0f, Color(40, 43, 50));
         textAlign(ALIGN_RIGHT | ALIGN_MIDDLE);
         text(x - 3.0f, py, buf, nullptr);
     }
@@ -283,10 +264,11 @@ void LimiterGraphWidget::drawTransferCurve(float x, float y, float w, float h)
     strokeWidth(2.2f);
     stroke();
 
-    // Live marker.
+    // Live marker -- with the unsmoothed reading, so the GR meter's
+    // Fast/Slow speed doesn't move the dot.
     if (detectorLevelDb_ > kGraphMinDb + 0.5f)
     {
-        const float liveLin = float(sscomp::dbToLinear(double(detectorLevelDb_ + gainReductionDb_) + p_.postGainDb));
+        const float liveLin = float(sscomp::dbToLinear(double(detectorLevelDb_ + markerGrDb_) + p_.postGainDb));
         const double ceilingLin = sscomp::dbToLinear(p_.ceilingDb);
         const double clipped = p_.softClip ? sscomp::softClip(liveLin, sscomp::dbToLinear(p_.ceilingDb - p_.clipKneeDb), ceilingLin)
                                            : sscomp::hardClip(liveLin, ceilingLin);
@@ -350,12 +332,11 @@ void LimiterGraphWidget::drawTransferCurve(float x, float y, float w, float h)
 
 void LimiterGraphWidget::drawGrMeterColumn(float x, float y, float w, float h)
 {
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(16, 17, 20));
     fill();
     strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     auto yOf = [&](float db) {
@@ -379,12 +360,7 @@ void LimiterGraphWidget::drawGrMeterColumn(float x, float y, float w, float h)
     if (grHoldDb_ < -0.01f)
     {
         const float holdY = yOf(grHoldDb_);
-        beginPath();
-        moveTo(x, holdY);
-        lineTo(x + w, holdY);
-        strokeColor(Color(235, 238, 242));
-        strokeWidth(1.5f);
-        stroke();
+        crispHLine(*this, x, x + w, holdY, 1.5f, Color(235, 238, 242));
     }
 
     fillColor(Color(140, 144, 152));
@@ -445,12 +421,11 @@ void LimiterGraphWidget::drawGrScale(float x, float y, float h)
 
 void LimiterGraphWidget::drawGrHistory(float x, float y, float w, float h)
 {
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(14, 15, 18));
     fill();
     strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     fillColor(Color(120, 124, 132));
@@ -505,7 +480,18 @@ void LimiterGraphWidget::onNanoDisplay()
     drawGrMeterColumn(grX, curveY_ + clipH + 4.0f, grColW, curveH_ - clipH - 4.0f);
     drawGrScale(grX + grColW + 3.0f, curveY_ + clipH + 4.0f, curveH_ - clipH - 4.0f);
 
-    drawGrHistory(curveX_, curveY_ + curveH_ + labelPad + 6.0f, curveW_ + grColW + grScaleW + 8.0f, histH);
+    // History below the curve, the GR meter's Fast | Slow switch below the
+    // meter -- same layout as CompressorGraphWidget.
+    const float histY = curveY_ + curveH_ + labelPad + 6.0f;
+    drawGrHistory(curveX_, histY, curveW_, histH);
+    grSpeedSwitch_.setBox(grX, histY, grColW + grScaleW + 2.0f, histH);
+    grSpeedSwitch_.draw(*this, grSpeed_);
+}
+
+std::string LimiterGraphWidget::tooltipAt(double x, double y) const
+{
+    if (grSpeedSwitch_.contains(float(x), float(y))) return GrSpeedSwitch::tooltip();
+    return std::string();
 }
 
 LimiterGraphWidget::Handle LimiterGraphWidget::hitHandle(float px, float py) const
@@ -531,6 +517,19 @@ bool LimiterGraphWidget::onMouse(const MouseEvent& ev)
 
     if (ev.press)
     {
+        const int seg = grSpeedSwitch_.hit(x, y);
+        if (seg >= 0)
+        {
+            const GrMeterSpeed s = GrMeterSpeed(seg);
+            if (s != grSpeed_)
+            {
+                grSpeed_ = s;
+                if (onGrMeterSpeedChanged_) onGrMeterSpeedChanged_(s);
+                repaint();
+            }
+            return true;
+        }
+
         const Handle h = hitHandle(x, y);
         if (h == Handle::None) return false;
         draggingHandle_ = h;

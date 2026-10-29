@@ -4,7 +4,7 @@
 
 Pure-math checks of the DSP headers, built with CMake into `build/bin/`
 and run by `./build_and_install.sh --test`. No DPF/GUI dependency; runs
-in well under a second. 49 numbered checks:
+in well under a second. 50 numbered checks:
 
 - **Compressor core** ([1]–[10]): the soft-knee curve (zero below the
   knee, the ratio line above it, continuous through the knee, 1:1 never
@@ -33,6 +33,8 @@ in well under a second. 49 numbered checks:
   (identity to the knee, slope 1 there, monotonic, odd, bounded) and the
   4x + parabola peak detector against sine peaks up to 22.5 kHz, and the
   Classic ratio choices (∞:1 exactly flat above the knee).
+- **Gain-reduction readout** ([50]): `GrPeakMeter` reports a one-sample
+  reduction inside a block, holds it 50 ms, then follows the gain again.
 
 ## `audio_testbench` (`tools/testbench/audio_testbench.cpp`)
 
@@ -73,7 +75,7 @@ the exact build command is in each file's header.
 | `tests/contour_widget_sim.cpp` | Contour's graph: mouse handling (selection windows, handles, links) with synthetic events. |
 | `tests/limiter_bypass_test.cpp` | Limiter: an impulse comes out exactly the reported latency later, Bypass off and on, separate and in-place buffers. |
 | `tests/limiter_test.cpp` | Limiter: output never over the Ceiling with Boost/Output Gain, clip stage idle in True Peak mode, Soft vs Hard on Classic's overshoot, inter-sample peaks with Oversampling off/on against a 16x reference, reported latency == real delay (Bypass too), Classic's Ratio on sustained material, timing. |
-| `tests/limiter_widget_sim.cpp` | Limiter's graph: the Clip Knee line, the Ceiling line and the Threshold handle each grab their own drags; True Peak drawn flat; the "limiter only" line. |
+| `tests/limiter_widget_sim.cpp` | Limiter's graph: the Clip Knee line, the Ceiling line and the Threshold handle each grab their own drags; True Peak drawn flat; the "limiter only" line; the GR meter's Fast \| Slow switch (clicks, hover text, State values) and its ballistics (short real sleeps). |
 | `tests/param_strip_sim.cpp` | Value fields: how far a value moves per pixel of drag, including from 0. |
 | `tests/check_ui_ctor.py` | Static check that every widget pointer of a UI class is created exactly once at the top level of its constructor. |
 

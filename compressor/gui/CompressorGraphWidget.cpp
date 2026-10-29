@@ -53,37 +53,11 @@ void CompressorGraphWidget::updateHold(float& holdDb, std::chrono::steady_clock:
     }
 }
 
-// See MultibandGraphWidget::setBandGainDb()'s own comment in the sibling
-// ../statespace project: a live gain-reduction number updated at the
-// full meter rate changes too fast to read, and the same applies here -- setLiveLevels()/setSecondaryLiveLevels() can be called as often
-// as the host delivers DPF output-Parameter updates (up to once per audio
-// block), far faster than a printed digit can actually be read. A one-pole
-// filter against wall-clock time, same technique and time constant, keeps
-// the printed number (and the meter fill it drives) legible while still
-// tracking real changes within a fraction of a second.
-void CompressorGraphWidget::smoothLiveValue(float& smoothed, std::chrono::steady_clock::time_point& lastUpdate, bool& init, float raw)
-{
-    if (!init)
-    {
-        smoothed = raw; // snap on the very first reading, nothing to smooth from yet
-        init = true;
-        lastUpdate = std::chrono::steady_clock::now();
-        return;
-    }
-
-    const auto now = std::chrono::steady_clock::now();
-    const float dtSec = std::chrono::duration<float>(now - lastUpdate).count();
-    lastUpdate = now;
-
-    constexpr float kTauSec = 0.22f; // same value as MultibandGraphWidget::setBandGainDb()
-    const float coeff = dtSec > 0.0f ? std::exp(-dtSec / kTauSec) : 1.0f;
-    smoothed = coeff * smoothed + (1.0f - coeff) * raw;
-}
-
 void CompressorGraphWidget::setLiveLevels(float detectorLevelDb, float gainReductionDb)
 {
     detectorLevelDb_ = detectorLevelDb;
-    smoothLiveValue(gainReductionDb_, grSmoothUpdated_, grSmoothInit_, gainReductionDb);
+    grSmoother_[0].process(gainReductionDb, grSpeed_);
+    gainReductionDb_ = grSmoother_[0].value();
     updateHold(grHoldDb_[0], grHoldUpdated_[0], grHoldPeakAt_[0], gainReductionDb);
     history_[historyPos_] = gainReductionDb;
     historyPos_ = (historyPos_ + 1) % kHistoryLen;
@@ -94,7 +68,8 @@ void CompressorGraphWidget::setSecondaryLiveLevels(bool show, float detectorLeve
 {
     secondaryShown_ = show;
     detectorLevelDbB_ = detectorLevelDb;
-    smoothLiveValue(gainReductionDbB_, grSmoothUpdatedB_, grSmoothInitB_, gainReductionDb);
+    grSmoother_[1].process(gainReductionDb, grSpeed_);
+    gainReductionDbB_ = grSmoother_[1].value();
     updateHold(grHoldDb_[1], grHoldUpdated_[1], grHoldPeakAt_[1], gainReductionDb);
 }
 
@@ -126,12 +101,11 @@ void CompressorGraphWidget::drawTransferCurve(float x, float y, float w, float h
     auto xToPx = [&](float db) { return dbToPxX(db); };
     auto yToPx = [&](float db) { return dbToPxY(db); };
 
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(18, 19, 23));
     fill();
     strokeColor(Color(48, 51, 58));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     // Gridlines every 12dB, labeled on both axes.
@@ -153,12 +127,7 @@ void CompressorGraphWidget::drawTransferCurve(float x, float y, float w, float h
         text(px, y + h + 1.0f, buf, nullptr);
 
         const float py = yToPx(db);
-        beginPath();
-        moveTo(x, py);
-        lineTo(x + w, py);
-        strokeColor(Color(40, 43, 50));
-        strokeWidth(1.0f);
-        stroke();
+        crispHLine(*this, x, x + w, py, 1.0f, Color(40, 43, 50));
         textAlign(ALIGN_RIGHT | ALIGN_MIDDLE);
         text(x - 3.0f, py, buf, nullptr);
     }
@@ -238,12 +207,16 @@ void CompressorGraphWidget::drawTransferCurve(float x, float y, float w, float h
     strokeWidth(2.2f);
     stroke();
 
-    // Live marker(s) -- current instantaneous position on the curve.
-    auto drawMarker = [&](float levelDb, float grDb, Color c)
+    // Live marker(s) -- current instantaneous position on the curve. Placed
+    // with the curve itself at the detector level (exactly how the DSP's
+    // CompressorVoice derives its gain reduction), not with the GR meter's
+    // smoothed value, so the meter's Fast/Slow speed never pulls the dot
+    // off the curve.
+    auto drawMarker = [&](float levelDb, Color c)
     {
         if (levelDb <= kGraphMinDb + 0.5f) return; // effectively silent, nothing meaningful to show
         const float px = xToPx(levelDb);
-        const float py = yToPx(levelDb + grDb);
+        const float py = yToPx(levelDb + float(sscomp::computeGainReductionDb(levelDb, thresholdDb_, ratioDown, ratioUp, kneeDb_)));
         beginPath();
         circle(px, py, 5.0f);
         fillColor(c.withAlpha(60.0f / 255.0f));
@@ -253,8 +226,8 @@ void CompressorGraphWidget::drawTransferCurve(float x, float y, float w, float h
         fillColor(c);
         fill();
     };
-    if (secondaryShown_) drawMarker(detectorLevelDbB_, gainReductionDbB_, Color(160, 190, 235));
-    drawMarker(detectorLevelDb_, gainReductionDb_, Color(235, 195, 60));
+    if (secondaryShown_) drawMarker(detectorLevelDbB_, Color(160, 190, 235));
+    drawMarker(detectorLevelDb_, Color(235, 195, 60));
 
     // Draggable handles: Threshold (sits exactly on the curve at
     // x=threshold), and Ratio -- a single handle now, at whichever
@@ -292,12 +265,11 @@ void CompressorGraphWidget::drawTransferCurve(float x, float y, float w, float h
 // line.
 void CompressorGraphWidget::drawGrMeterColumn(float x, float y, float w, float h, float grDb, float holdDb, float makeupDb, const char* label)
 {
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(16, 17, 20));
     fill();
     strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     auto yOf = [&](float db) {
@@ -356,23 +328,13 @@ void CompressorGraphWidget::drawGrMeterColumn(float x, float y, float w, float h
 
     // 0dB reference line -- brighter than the column's border, since this
     // is the meter's own meaningful zero, not just a boundary.
-    beginPath();
-    moveTo(x, zeroY);
-    lineTo(x + w, zeroY);
-    strokeColor(Color(90, 94, 100));
-    strokeWidth(1.0f);
-    stroke();
+    crispHLine(*this, x, x + w, zeroY, 1.0f, Color(90, 94, 100));
 
     // Peak-hold marker.
     if (std::fabs(holdDb) > 0.01f)
     {
         const float holdY = yOf(holdDb);
-        beginPath();
-        moveTo(x, holdY);
-        lineTo(x + w, holdY);
-        strokeColor(Color(235, 238, 242));
-        strokeWidth(1.5f);
-        stroke();
+        crispHLine(*this, x, x + w, holdY, 1.5f, Color(235, 238, 242));
     }
 
     // Makeup Gain marker, like the Multiband Compressor's. A solid line at
@@ -384,12 +346,7 @@ void CompressorGraphWidget::drawGrMeterColumn(float x, float y, float w, float h
     if (std::fabs(makeupDb) > 0.01f)
     {
         const float makeupY = yOf(makeupDb);
-        beginPath();
-        moveTo(x, makeupY);
-        lineTo(x + w, makeupY);
-        strokeColor(Color(160, 170, 230, 0.9f));
-        strokeWidth(1.5f);
-        stroke();
+        crispHLine(*this, x, x + w, makeupY, 1.5f, Color(160, 170, 230, 0.9f));
     }
 
     fillColor(Color(140, 144, 152));
@@ -421,12 +378,11 @@ void CompressorGraphWidget::drawGrScale(float x, float y, float h)
 
 void CompressorGraphWidget::drawGrHistory(float x, float y, float w, float h)
 {
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(14, 15, 18));
     fill();
     strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     fillColor(Color(120, 124, 132));
@@ -514,7 +470,18 @@ void CompressorGraphWidget::onNanoDisplay()
     drawGrValue(curveX_ + curveW_ + 6.0f, gainReductionDb_ + makeupGainDb_);
     if (secondaryShown_) drawGrValue(curveX_ + curveW_ + 6.0f + grColW + 4.0f, gainReductionDbB_ + makeupGainDbB_);
 
-    drawGrHistory(curveX_, curveY_ + curveH_ + labelPad + 6.0f, curveW_ + grColsW + grScaleW + 8.0f, histH);
+    // The history strip runs below the curve; below the GR meter sits its
+    // Fast | Slow switch, so it reads as part of the meter.
+    const float histY = curveY_ + curveH_ + labelPad + 6.0f;
+    drawGrHistory(curveX_, histY, curveW_, histH);
+    grSpeedSwitch_.setBox(curveX_ + curveW_ + 6.0f, histY, grColsW + grScaleW + 2.0f, histH);
+    grSpeedSwitch_.draw(*this, grSpeed_);
+}
+
+std::string CompressorGraphWidget::tooltipAt(double x, double y) const
+{
+    if (grSpeedSwitch_.contains(float(x), float(y))) return GrSpeedSwitch::tooltip();
+    return std::string();
 }
 
 namespace {
@@ -544,6 +511,19 @@ bool CompressorGraphWidget::onMouse(const MouseEvent& ev)
 
     if (ev.press)
     {
+        const int seg = grSpeedSwitch_.hit(x, y);
+        if (seg >= 0)
+        {
+            const GrMeterSpeed s = GrMeterSpeed(seg);
+            if (s != grSpeed_)
+            {
+                grSpeed_ = s;
+                if (onGrMeterSpeedChanged_) onGrMeterSpeedChanged_(s);
+                repaint();
+            }
+            return true;
+        }
+
         const Handle h = hitHandle(x, y);
         if (h == Handle::None) return false;
         draggingHandle_ = h;

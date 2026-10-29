@@ -72,7 +72,13 @@ inactive in the DSP, so stray automation can't change the sound through a
 control that isn't shown.
 
 Meters, gain reduction and the scope data are output Parameters read by
-the UI. The two spectrum analysers only run while the editor's scope
+the UI. The gain-reduction readout is `sscomp::GrPeakMeter`: the most
+extreme gain of the block, held 50 ms, so a short reduction between two
+editor reads still arrives (the host only passes on the latest value).
+The editors put their Fast/Slow ballistics on top (`gui/GrMeterBallistics.hpp`,
+attack/release 5 ms/0.4 s or 0.3 s/1.2 s, for bar and number together;
+peak hold and history use the unsmoothed readout). The choice is the
+UI-only State `grMeterSpeed`, like `presetDir`. The two spectrum analysers only run while the editor's scope
 panel is open: the UI increments `kParamUiHeartbeat` every idle tick, and
 `run()` feeds the analysers only if it changed within the last ~2 s (a
 counter, not a toggle, because the LV2 wrapper only delivers changed
@@ -191,8 +197,9 @@ the mono info header.
   while a field is being edited; starting an edit takes keyboard focus.
 - **`CompressorGraphWidget`** -- transfer curve, knee shading, live
   marker, Threshold and Ratio handles, scroll for Knee, bipolar
-  gain-reduction column with peak hold, and history strip. Drawing and
-  hit-testing share one coordinate mapping.
+  gain-reduction column with peak hold, its Fast | Slow switch
+  (`GrSpeedSwitch`), and history strip. Drawing and hit-testing share one
+  coordinate mapping.
 - **`LimiterGraphWidget`** -- the Limiter's curve with Threshold handle and
   Ceiling line.
 - **`ContourGraphWidget`** -- curve editing (tools, selection, handles,

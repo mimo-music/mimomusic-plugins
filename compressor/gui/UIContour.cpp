@@ -159,6 +159,7 @@ UIContour::UIContour()
     graph_->setCurve(curve_);
     graph_->setThreshold(paramCache_[kParamThreshold]);
     graph_->setTriggerCondition(condition_);
+    graph_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graph_->setOnThresholdChanged([this](float v) { onGraphParamChanged(kParamThreshold, v); });
     graph_->setOnCurveChanged([this](const TransferCurve& c) { onGraphCurveChanged(false, c); });
 
@@ -170,6 +171,7 @@ UIContour::UIContour()
     graphA_->setCurve(curve_);
     graphA_->setThreshold(paramCache_[kParamThreshold]);
     graphA_->setTriggerCondition(condition_);
+    graphA_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graphA_->setOnThresholdChanged([this](float v) { onGraphParamChanged(kParamThreshold, v); });
     graphA_->setOnCurveChanged([this](const TransferCurve& c) { onGraphCurveChanged(false, c); });
 
@@ -184,6 +186,7 @@ UIContour::UIContour()
     // that method's own declaration comment (UIContour.hpp) for why a
     // curve needs its own mechanism instead of bParam()'s Parameter-index
     // trick.
+    graphB_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graphB_->setOnThresholdChanged([this](float v) { onGraphParamChanged(bParam(true, kParamThreshold, kParamThresholdB), v); });
     graphB_->setOnCurveChanged([this](const TransferCurve& c) { onGraphCurveChanged(true, c); });
     // One trail length for every plot (scrolling the legend on any of them sets all three), so Dual-Mono / Mid-Side look alike per channel.
@@ -1546,8 +1549,19 @@ void UIContour::parameterChanged(uint32_t index, float value)
     repaint();
 }
 
+// The GR meter's Fast/Slow switch: one setting for every graph in this
+// editor, saved with the session as the "grMeterSpeed" State.
+void UIContour::setGrMeterSpeed(DGL_NAMESPACE::GrMeterSpeed s, bool save)
+{
+    graph_->setGrMeterSpeed(s);
+    graphA_->setGrMeterSpeed(s);
+    graphB_->setGrMeterSpeed(s);
+    if (save) setState("grMeterSpeed", DGL_NAMESPACE::grMeterSpeedStateValue(s));
+}
+
 void UIContour::stateChanged(const char* key, const char* value)
 {
+    if (std::strcmp(key, "grMeterSpeed") == 0) { setGrMeterSpeed(DGL_NAMESPACE::grMeterSpeedFromState(value), false); return; }
     if (std::strcmp(key, "stereoMode") == 0)
     {
         if (kContourMono) return; // always Linked
@@ -1951,10 +1965,14 @@ void UIContour::uiIdle()
     double levelA, grA, levelB, grB;
     sscomp::unpackTrailPair(paramCache_[kParamMeterTrailA], levelA, grA);
     sscomp::unpackTrailPair(paramCache_[kParamMeterTrailB], levelB, grB);
-    // The marker / GR column / hold use the latest sample...
-    graph_->setLiveLevels(float(levelA), float(grA), false);
-    graphA_->setLiveLevels(float(levelA), float(grA), false);
-    graphB_->setLiveLevels(float(levelB), float(grB), false);
+    // The marker uses the latest sample; the GR meter (column, number, hold,
+    // history) the plugin's held GR readout, so a short cut between two
+    // ticks still shows (see sscomp::GrPeakMeter)...
+    const float meterGrA = paramCache_[kParamMeterGainReductionA];
+    const float meterGrB = paramCache_[kParamMeterGainReductionB];
+    graph_->setLiveLevels(float(levelA), float(grA), meterGrA, false);
+    graphA_->setLiveLevels(float(levelA), float(grA), meterGrA, false);
+    graphB_->setLiveLevels(float(levelB), float(grB), meterGrB, false);
     // ...and the trail gets the whole bank of pairs the plugin published for the
     // last block (kTrailBankSize points instead of one) -- unless nothing new
     // arrived since the last tick (a redraw faster than the audio blocks would

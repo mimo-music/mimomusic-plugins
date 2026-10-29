@@ -42,6 +42,7 @@ protected:
     void uiFileBrowserSelected(const char* filename) override;
 
 private:
+    void setGrMeterSpeed(DGL_NAMESPACE::GrMeterSpeed s, bool save);
     // Whichever of strip_/stripA_/stripB_/stripGlobal_/scStrip_ is
     // currently mid-edit, or nullptr -- only one can ever be at once
     // (only one is visible/clickable at a time between the Linked/dual

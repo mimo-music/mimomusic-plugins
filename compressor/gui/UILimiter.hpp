@@ -47,6 +47,7 @@ protected:
     void uiFileBrowserSelected(const char* filename) override;
 
 private:
+    void setGrMeterSpeed(DGL_NAMESPACE::GrMeterSpeed s, bool save);
     void layout();
     void refreshBypassColors();
     void refreshBoostColors();

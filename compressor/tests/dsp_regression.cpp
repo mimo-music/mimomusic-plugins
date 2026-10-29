@@ -1479,6 +1479,28 @@ int main()
         if (!ok) ++failures;
     }
 
+    // [50] GrPeakMeter (the editor's GR readout): a reduction lasting a
+    // single sample in the middle of a block is still reported at the block's
+    // end, holds 50 ms, then the readout follows the gain again; a bigger
+    // boost wins over a smaller cut.
+    {
+        GrPeakMeter m;
+        m.prepare(48000.0);
+        bool ok = true;
+        for (int i = 0; i < 256; ++i) m.process(i == 100 ? -9.0 : -1.0);
+        ok = ok && nearlyEqual(m.gainDb(), -9.0, 1e-12);
+        for (int i = 0; i < 2200; ++i) m.process(-1.0); // 2355 samples after the peak: still inside the 2400-sample hold
+        ok = ok && nearlyEqual(m.gainDb(), -9.0, 1e-12);
+        for (int i = 0; i < 200; ++i) m.process(-1.0);
+        ok = ok && nearlyEqual(m.gainDb(), -1.0, 1e-12);
+        m.process(+4.0); m.process(-3.0);
+        ok = ok && nearlyEqual(m.gainDb(), 4.0, 1e-12);
+        m.reset();
+        ok = ok && m.gainDb() == 0.0;
+        printf("[50] GR readout: a one-sample reduction is reported, held 50 ms, then released: %s\n", ok ? "OK" : "FAIL");
+        if (!ok) ++failures;
+    }
+
     printf("\n%s: %d test(s) failed\n", failures == 0 ? "PASS" : "FAILURES", failures);
     return failures == 0 ? 0 : 1;
 }

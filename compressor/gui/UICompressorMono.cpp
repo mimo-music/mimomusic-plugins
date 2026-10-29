@@ -94,6 +94,7 @@ UICompressorMono::UICompressorMono()
     graph_->setOnThresholdChanged([this](float v) { onGraphParamChanged(kParamThreshold, v); });
     graph_->setOnRatioChanged([this](float v) { onGraphParamChanged(kParamRatio, v); });
     graph_->setOnKneeChanged([this](float v) { onGraphParamChanged(kParamKnee, v); });
+    graph_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
 
     strip_ = new ParamStripWidget(this);
     refreshStripFields(); // "SC Gain" only included once Sidechain is actually enabled -- see its own comment
@@ -179,6 +180,7 @@ UICompressorMono::UICompressorMono()
     tooltip_->addTarget(btnSidechain_, "Toggle external sidechain: detect from the Sidechain input instead of the main signal.");
     // Hover descriptions for the parameter fields.
     tooltip_->addFieldTarget(strip_, [this](double x, double y) { return strip_->fieldTooltipAt(x, y); });
+    tooltip_->addFieldTarget(graph_, [this](double x, double y) { return graph_->tooltipAt(x, y); });
 
     layout();
 }
@@ -391,8 +393,17 @@ void UICompressorMono::parameterChanged(uint32_t index, float value)
     repaint();
 }
 
+// The GR meter's Fast/Slow switch: one setting for every graph in this
+// editor, saved with the session as the "grMeterSpeed" State.
+void UICompressorMono::setGrMeterSpeed(DGL_NAMESPACE::GrMeterSpeed s, bool save)
+{
+    graph_->setGrMeterSpeed(s);
+    if (save) setState("grMeterSpeed", DGL_NAMESPACE::grMeterSpeedStateValue(s));
+}
+
 void UICompressorMono::stateChanged(const char* key, const char* value)
 {
+    if (std::strcmp(key, "grMeterSpeed") == 0) { setGrMeterSpeed(DGL_NAMESPACE::grMeterSpeedFromState(value), false); return; }
     if (std::strcmp(key, "presetDir") == 0) { lastPresetDir_ = value; return; }
     if (std::strcmp(key, "ratioDirection") == 0)
     {

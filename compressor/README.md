@@ -20,6 +20,10 @@ Dynamics plugins sharing one feed-forward DSP core:
   finer steps.
 - **Level meters** with peak hold and a clip LED (click a meter to clear
   it).
+- **Gain-reduction meter** with a **Fast / Slow** switch right below it:
+  Fast follows the compressor closely, Slow shows the average reduction
+  and is easier to read. The number on top always matches the bar; the
+  white line marks the latest peak in both modes. Saved with the session.
 - Hover over any control for a short description.
 
 ## Compressor Mono / Compressor Stereo

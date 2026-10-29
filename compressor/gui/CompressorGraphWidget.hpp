@@ -64,6 +64,7 @@
 #pragma once
 
 #include "EditorSubWidget.hpp"
+#include "GrMeterBallistics.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -117,6 +118,16 @@ public:
     void setOnKneeChanged(std::function<void(float)> cb) { onKneeChanged_ = std::move(cb); }
     void setThresholdRange(float minDb, float maxDb) { thresholdMinDb_ = minDb; thresholdMaxDb_ = maxDb; }
 
+    // The GR meter's Fast/Slow speed (see GrMeterBallistics.hpp). The
+    // switch below the meter changes it locally and fires the callback,
+    // which the owning UI uses to save the State and update its other
+    // graph widgets.
+    void setGrMeterSpeed(GrMeterSpeed s) { if (s != grSpeed_) { grSpeed_ = s; repaint(); } }
+    void setOnGrMeterSpeedChanged(std::function<void(GrMeterSpeed)> cb) { onGrMeterSpeedChanged_ = std::move(cb); }
+
+    // Hover text at a local position (TooltipOverlay::addFieldTarget()).
+    std::string tooltipAt(double x, double y) const;
+
 protected:
     void onNanoDisplay() override;
     bool onMouse(const MouseEvent& ev) override;
@@ -132,13 +143,6 @@ private:
     void drawGrHistory(float x, float y, float w, float h);
     void updateHold(float& holdDb, std::chrono::steady_clock::time_point& lastUpdate,
                      std::chrono::steady_clock::time_point& peakAt, float grDb);
-
-    // Smooths a raw, potentially very-fast-arriving live reading against
-    // wall-clock time before it's stored/drawn -- see .cpp's own comment
-    // (the Multiband GR-meter readability fix from the sibling
-    // ../statespace project, applied here identically: this graph's own
-    // live GR number would otherwise flicker too fast to read).
-    void smoothLiveValue(float& smoothed, std::chrono::steady_clock::time_point& lastUpdate, bool& init, float raw);
 
     float dbToPxX(float db) const;
     float dbToPxY(float db) const;
@@ -167,13 +171,14 @@ private:
     // once -- see this file's header comment.
     bool ratioUpMode_ = false;
     float thresholdMinDb_ = -60.0f, thresholdMaxDb_ = 0.0f;
+    // gainReductionDb_/B_: the smoothed values the bar and the number
+    // both show (GrMeterSmoother, at grSpeed_).
     float detectorLevelDb_ = -120.0f, gainReductionDb_ = 0.0f;
-    std::chrono::steady_clock::time_point grSmoothUpdated_{};
-    bool grSmoothInit_ = false;
     bool secondaryShown_ = false;
     float detectorLevelDbB_ = -120.0f, gainReductionDbB_ = 0.0f;
-    std::chrono::steady_clock::time_point grSmoothUpdatedB_{};
-    bool grSmoothInitB_ = false;
+    GrMeterSmoother grSmoother_[2];
+    GrMeterSpeed grSpeed_ = GrMeterSpeed::Fast;
+    GrSpeedSwitch grSpeedSwitch_;
     float makeupGainDb_ = 0.0f, makeupGainDbB_ = 0.0f;
     std::string labelA_ = "GR", labelB_ = "GR B";
 
@@ -221,6 +226,7 @@ private:
     std::function<void(float)> onThresholdChanged_;
     std::function<void(float)> onRatioChanged_;
     std::function<void(float)> onKneeChanged_;
+    std::function<void(GrMeterSpeed)> onGrMeterSpeedChanged_;
 };
 
 END_NAMESPACE_DGL

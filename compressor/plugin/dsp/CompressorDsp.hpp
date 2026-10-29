@@ -259,6 +259,38 @@ private:
     double peak_ = 0.0;
 };
 
+// The gain-reduction readout sent to the editor. Reporting only the last
+// sample of each block missed short reductions in between and changed
+// with the buffer size; this keeps the most extreme gain (a cut or a
+// boost, whichever is larger) for kHoldSec, then follows the gain again.
+// The hold bridges the gap between two editor reads (the host sends the
+// latest value only, ~25-60 times per second); the editor applies its own
+// Fast/Slow ballistics on top (gui/GrMeterBallistics.hpp).
+class GrPeakMeter
+{
+public:
+    void prepare(double sampleRate)
+    {
+        holdSamples_ = std::max(1, int(std::lround(kHoldSec * std::max(1.0, sampleRate))));
+    }
+
+    inline void process(double gainDb)
+    {
+        if (std::fabs(gainDb) >= std::fabs(heldDb_)) { heldDb_ = gainDb; holdLeft_ = holdSamples_; }
+        else if (holdLeft_ > 0) --holdLeft_;
+        else heldDb_ = gainDb;
+    }
+
+    double gainDb() const { return heldDb_; }
+    void reset() { heldDb_ = 0.0; holdLeft_ = 0; }
+
+private:
+    static constexpr double kHoldSec = 0.05;
+    int holdSamples_ = 2400;
+    int holdLeft_ = 0;
+    double heldDb_ = 0.0;
+};
+
 // ---- sidechain band filter: isolate a frequency range to trigger from ---
 //
 // Sidechain amplification plus a band filter, so the compressor can be

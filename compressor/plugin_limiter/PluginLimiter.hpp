@@ -79,6 +79,9 @@ enum StateIndex
 {
     kStatePresetDir = 0, // last folder used in the Save As.../Load... dialogs (UI convenience only)
     kStateAlgorithm = 1, // LimiterAlgorithm (0=Classic/1=TruePeak) -- DSP-relevant, see setState()
+    // GR meter speed in the editor, "0"=Fast/"1"=Slow (UI preference only,
+    // the DSP never reads it -- same as presetDir).
+    kStateGrMeterSpeed,
     kStateCount
 };
 
@@ -116,6 +119,7 @@ private:
     sscomp::TruePeakDetector tpDetL_, tpDetR_; // Oversampling's peak detectors
     sscomp::LoudnessMeter loudnessInL_, loudnessInR_, loudnessOutL_, loudnessOutR_;
     sscomp::PeakMeter peakInL_, peakInR_, peakOutL_, peakOutR_;
+    sscomp::GrPeakMeter grMeter_; // the GR readout -- see its own comment
 
     LimiterAlgorithm algorithm_ = LimiterAlgorithm::Classic;
 

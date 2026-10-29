@@ -121,6 +121,7 @@
 #pragma once
 
 #include "EditorSubWidget.hpp"
+#include "GrMeterBallistics.hpp"
 
 #include "../plugin/dsp/CurveDsp.hpp"
 
@@ -213,7 +214,15 @@ public:
     // here then only drive the marker, the GR column, hold and history.
     // Forgets the trail (its points mean something else after the dots' source switch).
     void clearTrail() { trailCount_[0] = trailCount_[1] = 0; trailPos_[0] = trailPos_[1] = 0; repaint(); }
-    void setLiveLevels(float detectorLevelDb, float gainReductionDb, bool pushToTrail = true);
+    void setLiveLevels(float detectorLevelDb, float gainReductionDb, bool pushToTrail = true)
+    {
+        setLiveLevels(detectorLevelDb, gainReductionDb, gainReductionDb, pushToTrail);
+    }
+    // meterGrDb: what the GR meter (bar, number, hold, history) shows -- the
+    // plugin's held GR readout (kParamMeterGainReductionA/B, see
+    // sscomp::GrPeakMeter), while gainReductionDb is the exact sample paired
+    // with detectorLevelDb for the marker and the trail.
+    void setLiveLevels(float detectorLevelDb, float gainReductionDb, float meterGrDb, bool pushToTrail);
     // Makeup Gain shown on the bar like in the Compressor plugin -- ported from
     // CompressorGraphWidget::setMakeupGainDb(): each gain-reduction column draws the NET effect (gain reduction +
     // Makeup Gain) at full strength with the makeup-less reduction dimmed behind it, plus a marker line at the configured Makeup
@@ -232,6 +241,10 @@ public:
     // blend from yellow (0) to green (1), so a long release visibly fades back.
     void setTriggerActivity(float e) { triggerActivity_ = e < 0.0f ? 0.0f : (e > 1.0f ? 1.0f : e); repaint(); }
     void setSecondaryLabels(const char* a, const char* b) { labelA_ = a; labelB_ = b; }
+
+    // The GR meter's Fast/Slow speed -- same as CompressorGraphWidget's.
+    void setGrMeterSpeed(GrMeterSpeed s) { if (s != grSpeed_) { grSpeed_ = s; repaint(); } }
+    void setOnGrMeterSpeedChanged(std::function<void(GrMeterSpeed)> cb) { onGrMeterSpeedChanged_ = std::move(cb); }
 
     // Fired whenever this widget's own editing (dragging a point,
     // clicking to add one, double-clicking to remove one, or dragging
@@ -265,7 +278,6 @@ private:
     void drawGrHistory(float x, float y, float w, float h);
     void updateHold(float& holdDb, std::chrono::steady_clock::time_point& lastUpdate,
                      std::chrono::steady_clock::time_point& peakAt, float grDb);
-    void smoothLiveValue(float& smoothed, std::chrono::steady_clock::time_point& lastUpdate, bool& init, float raw);
 
     float dbToPxX(float db) const;
     float dbToPxY(float db) const;
@@ -417,18 +429,19 @@ private:
 
     float triggerActivity_ = 0.0f; // see setTriggerActivity()
     float detectorLevelDb_ = -120.0f, gainReductionDb_ = 0.0f;
-    std::chrono::steady_clock::time_point grSmoothUpdated_{};
-    bool grSmoothInit_ = false;
     bool secondaryShown_ = false;
     float detectorLevelDbB_ = -120.0f, gainReductionDbB_ = 0.0f;
     float makeupGainDb_ = 0.0f, makeupGainDbB_ = 0.0f; // configured Makeup Gain of each column, see setMakeupGainDb()
-    std::chrono::steady_clock::time_point grSmoothUpdatedB_{};
-    bool grSmoothInitB_ = false;
+    // The bar and the number show gainReductionDb_/B_, smoothed by these
+    // at grSpeed_ (see GrMeterBallistics.hpp).
+    GrMeterSmoother grSmoother_[2];
+    GrMeterSpeed grSpeed_ = GrMeterSpeed::Fast;
+    GrSpeedSwitch grSpeedSwitch_;
 
     // Raw (unsmoothed) last gain reduction per voice, for the "now" head
     // marker only -- deliberately NOT the same as gainReductionDb_/
-    // gainReductionDbB_ above, which run through smoothLiveValue()'s own
-    // ~220ms display easing (good for a readable number on the meter
+    // gainReductionDbB_ above, which run through the GR meter's own
+    // display ballistics (good for a readable number on the meter
     // chip/column, but that's an extra layer of lag on top of whatever
     // the DSP itself is already doing, which would make the marker lie
     // about a literal 0ms attack/release actually tracking the curve
@@ -442,7 +455,7 @@ private:
     // pixel coordinates -- converted at draw time so a mid-trail window
     // resize doesn't leave stale positions) plus a real timestamp per
     // sample, since the idle-callback rate pushing these isn't fixed
-    // across hosts (same reasoning as updateHold()/smoothLiveValue()'s
+    // across hosts (same reasoning as updateHold()/GrMeterSmoother's
     // own use of steady_clock deltas rather than a frame count). Faded-
     // out entries are simply skipped at draw time, not pruned -- see
     // drawTrail()'s own comment. kTrailCapacity is sized generously
@@ -619,6 +632,7 @@ private:
     std::function<void(const sscomp::TransferCurve&)> onCurveChanged_;
     std::function<void(float)> onTrailSecondsChanged_;
     std::function<void(float)> onThresholdChanged_;
+    std::function<void(GrMeterSpeed)> onGrMeterSpeedChanged_;
 };
 
 END_NAMESPACE_DGL

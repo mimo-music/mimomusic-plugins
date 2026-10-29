@@ -28,9 +28,11 @@
 #pragma once
 
 #include "EditorSubWidget.hpp"
+#include "GrMeterBallistics.hpp"
 
 #include <chrono>
 #include <functional>
+#include <string>
 
 START_NAMESPACE_DGL
 
@@ -66,6 +68,13 @@ public:
     void setOnCeilingChanged(std::function<void(float)> cb) { onCeilingChanged_ = std::move(cb); }
     void setOnClipKneeChanged(std::function<void(float)> cb) { onClipKneeChanged_ = std::move(cb); }
 
+    // The GR meter's Fast/Slow speed -- same as CompressorGraphWidget's.
+    void setGrMeterSpeed(GrMeterSpeed s) { if (s != grSpeed_) { grSpeed_ = s; repaint(); } }
+    void setOnGrMeterSpeedChanged(std::function<void(GrMeterSpeed)> cb) { onGrMeterSpeedChanged_ = std::move(cb); }
+
+    // Hover text at a local position (TooltipOverlay::addFieldTarget()).
+    std::string tooltipAt(double x, double y) const;
+
 protected:
     void onNanoDisplay() override;
     bool onMouse(const MouseEvent& ev) override;
@@ -92,9 +101,11 @@ private:
     float thresholdMinDb_ = -60.0f, thresholdMaxDb_ = 0.0f;
     float ceilingMinDb_ = -12.0f, ceilingMaxDb_ = 0.0f;
     float clipKneeMinDb_ = 0.1f, clipKneeMaxDb_ = 6.0f;
-    float detectorLevelDb_ = -120.0f, gainReductionDb_ = 0.0f;
-    std::chrono::steady_clock::time_point grSmoothUpdated_{};
-    bool grSmoothInit_ = false;
+    float detectorLevelDb_ = -120.0f, gainReductionDb_ = 0.0f; // gainReductionDb_: smoothed, what the bar and number show
+    float markerGrDb_ = 0.0f; // unsmoothed, for the live marker on the curve
+    GrMeterSmoother grSmoother_;
+    GrMeterSpeed grSpeed_ = GrMeterSpeed::Fast;
+    GrSpeedSwitch grSpeedSwitch_;
 
     float grHoldDb_ = 0.0f;
     std::chrono::steady_clock::time_point grHoldUpdated_{};
@@ -122,6 +133,7 @@ private:
     std::function<void(float)> onThresholdChanged_;
     std::function<void(float)> onCeilingChanged_;
     std::function<void(float)> onClipKneeChanged_;
+    std::function<void(GrMeterSpeed)> onGrMeterSpeedChanged_;
 };
 
 END_NAMESPACE_DGL

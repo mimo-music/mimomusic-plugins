@@ -86,6 +86,9 @@ enum StateIndex
     // not a continuous automatable Parameter, matching the Stereo
     // plugin's own kStateStereoMode convention.
     kStateRatioDirection,
+    // GR meter speed in the editor, "0"=Fast/"1"=Slow (UI preference only,
+    // the DSP never reads it -- same as presetDir).
+    kStateGrMeterSpeed,
     kStateCount
 };
 
@@ -114,6 +117,7 @@ private:
     sscomp::CompressorVoice voice_;
     sscomp::LoudnessMeter loudnessIn_, loudnessOut_;
     sscomp::PeakMeter peakIn_, peakOut_;
+    sscomp::GrPeakMeter grMeter_; // the GR readout -- see its own comment
 
     double inputGainDb_ = 0.0;
     double thresholdDb_ = -18.0;

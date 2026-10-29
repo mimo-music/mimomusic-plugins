@@ -54,7 +54,7 @@ struct ScrollEvent { Point<double> pos; Point<double> delta; uint32_t mod = 0; }
 struct Paint {};
 template <typename T> struct Rectangle { T x{}, y{}, w{}, h{}; T getWidth() const { return w; } T getHeight() const { return h; } };
 
-struct FakeWindow { void focus() {} };
+struct FakeWindow { void focus() {} unsigned getWidth() const { return 800; } };
 
 struct Widget { virtual ~Widget() = default; };
 // Widget constructors take the editor as a NanoTopLevelWidget* (shared NanoVG
@@ -75,7 +75,10 @@ struct NanoSubWidget : Widget
     unsigned getWidth() const { return unsigned(w_); }
     unsigned getHeight() const { return unsigned(h_); }
     void repaint() {}
-    FakeWindow& getWindow() { static FakeWindow fw; return fw; }
+    FakeWindow& getWindow() const { static FakeWindow fw; return fw; }
+    // pixelRatio() == 1: the fake window and top-level widget are the same width.
+    struct FakeTop { unsigned getWidth() const { return 800; } };
+    const FakeTop* getTopLevelWidget() const { static FakeTop t; return &t; }
     void loadSharedResources() {}
     // drawing: all no-ops
     void beginPath() {}

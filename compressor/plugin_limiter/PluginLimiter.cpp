@@ -192,6 +192,12 @@ void PluginLimiter::initState(uint32_t index, State& state)
         state.hints = 0; // UI convenience only, the DSP side never reads this
         state.defaultValue = "";
         break;
+    case kStateGrMeterSpeed:
+        state.key = "grMeterSpeed";
+        state.label = "GR Meter Speed (Fast/Slow)";
+        state.hints = 0; // UI preference only, the DSP side never reads this
+        state.defaultValue = "0"; // Fast
+        break;
     case kStateAlgorithm:
         state.key = "algorithm";
         state.label = "Algorithm (Classic/True Peak)";
@@ -305,6 +311,7 @@ void PluginLimiter::activate()
     tpDetL_.reset(); tpDetR_.reset();
     loudnessInL_.reset(); loudnessInR_.reset(); loudnessOutL_.reset(); loudnessOutR_.reset();
     peakInL_.reset(); peakInR_.reset(); peakOutL_.reset(); peakOutR_.reset();
+    grMeter_.reset();
     std::fill(delayBufL_.begin(), delayBufL_.end(), 0.0f);
     std::fill(delayBufR_.begin(), delayBufR_.end(), 0.0f);
     delayPos_ = 0;
@@ -348,6 +355,7 @@ void PluginLimiter::run(const float** inputs, float** outputs, uint32_t frames)
         meterInputRmsR_ = float(loudnessInR_.rmsDb());  meterInputPeakR_ = float(peakInR_.peakDb());
         meterOutputRmsL_ = float(loudnessOutL_.rmsDb()); meterOutputPeakL_ = float(peakOutL_.peakDb());
         meterOutputRmsR_ = float(loudnessOutR_.rmsDb()); meterOutputPeakR_ = float(peakOutR_.peakDb());
+        grMeter_.reset();
         meterGainReduction_ = 0.0f;
         meterClip_ = 0.0f;
         return;
@@ -388,7 +396,7 @@ void PluginLimiter::processBlock(const float* inL, const float* inR, float* outL
 
     const size_t bufLen = delayBufL_.size();
     const int readDelay = delaySamples_ + (kOversample ? TruePeakDetector::kDelay : 0);
-    double lastDetector = 0.0, lastGrLin = 1.0;
+    double lastDetector = 0.0;
     double maxPreClip = 0.0; // loudest sample going into the clip stage this block, for meterClip_
 
     for (uint32_t i = 0; i < frames; ++i)
@@ -419,7 +427,7 @@ void PluginLimiter::processBlock(const float* inL, const float* inR, float* outL
             grLin = voice_.process(detector);
         }
         lastDetector = detector;
-        lastGrLin = grLin;
+        grMeter_.process(linearToDb(grLin));
 
         double delayedL = xgL, delayedR = xgR;
         if (bufLen > 0)
@@ -476,18 +484,9 @@ void PluginLimiter::processBlock(const float* inL, const float* inR, float* outL
         meterClip_ = 0.0f;
     }
 
-    if (truePeak)
-    {
-        // True Peak has no smoothed detector; report the last sample's level
-        // and the gain applied to it.
-        meterDetector_ = float(linearToDb(lastDetector));
-        meterGainReduction_ = float(linearToDb(lastGrLin));
-    }
-    else
-    {
-        meterDetector_ = float(voice_.detectorLevelDb());
-        meterGainReduction_ = float(voice_.gainReductionDb());
-    }
+    // True Peak has no smoothed detector; report the last sample's level.
+    meterDetector_ = truePeak ? float(linearToDb(lastDetector)) : float(voice_.detectorLevelDb());
+    meterGainReduction_ = float(grMeter_.gainDb());
 }
 
 void PluginLimiter::sampleRateChanged(double newSampleRate)
@@ -497,6 +496,7 @@ void PluginLimiter::sampleRateChanged(double newSampleRate)
     loudnessOutL_.prepare(newSampleRate); loudnessOutR_.prepare(newSampleRate);
     peakInL_.prepare(newSampleRate); peakInR_.prepare(newSampleRate);
     peakOutL_.prepare(newSampleRate); peakOutR_.prepare(newSampleRate);
+    grMeter_.prepare(newSampleRate);
 
     // Maximum lookahead + the oversampling detector's delay + headroom (so
     // the read position never lands on the slot written this same step).

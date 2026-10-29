@@ -180,6 +180,12 @@ void PluginCompressorMono::initState(uint32_t index, State& state)
         state.hints = 0; // UI convenience only, the DSP side never reads this
         state.defaultValue = "";
         break;
+    case kStateGrMeterSpeed:
+        state.key = "grMeterSpeed";
+        state.label = "GR Meter Speed (Fast/Slow)";
+        state.hints = 0; // UI preference only, the DSP side never reads this
+        state.defaultValue = "0"; // Fast
+        break;
     case kStateRatioDirection:
         state.key = "ratioDirection";
         state.label = "Ratio Direction (Down/Up)";
@@ -259,6 +265,7 @@ void PluginCompressorMono::activate()
     loudnessOut_.reset();
     peakIn_.reset();
     peakOut_.reset();
+    grMeter_.reset();
 }
 
 void PluginCompressorMono::run(const float** inputs, float** outputs, uint32_t frames)
@@ -283,6 +290,7 @@ void PluginCompressorMono::run(const float** inputs, float** outputs, uint32_t f
         meterInputPeak_ = float(peakIn_.peakDb());
         meterOutputRms_ = float(loudnessOut_.rmsDb());
         meterOutputPeak_ = float(peakOut_.peakDb());
+        grMeter_.reset();
         meterGainReductionDb_ = 0.0f;
         return;
     }
@@ -312,6 +320,7 @@ void PluginCompressorMono::run(const float** inputs, float** outputs, uint32_t f
         const double detectorSample = sidechainEnabled_ ? (double(sc[i]) * scGainLin) : xg;
         const double grLin = voice_.process(std::fabs(detectorSample));
         double y = xg * grLin;
+        grMeter_.process(voice_.gainReductionDb());
 
         loudnessIn_.process(xg);
         loudnessOut_.process(y);
@@ -326,7 +335,7 @@ void PluginCompressorMono::run(const float** inputs, float** outputs, uint32_t f
     meterOutputRms_ = float(loudnessOut_.rmsDb());
     meterOutputPeak_ = float(peakOut_.peakDb());
     meterDetectorDb_ = float(voice_.detectorLevelDb());
-    meterGainReductionDb_ = float(voice_.gainReductionDb());
+    meterGainReductionDb_ = float(grMeter_.gainDb());
 }
 
 void PluginCompressorMono::sampleRateChanged(double newSampleRate)
@@ -336,6 +345,7 @@ void PluginCompressorMono::sampleRateChanged(double newSampleRate)
     loudnessOut_.prepare(newSampleRate);
     peakIn_.prepare(newSampleRate);
     peakOut_.prepare(newSampleRate);
+    grMeter_.prepare(newSampleRate);
 }
 
 START_NAMESPACE_DISTRHO

@@ -407,22 +407,6 @@ void MultibandGraphWidget::onNanoDisplay()
         text(x, graphY_ + graphH_ + 2.0f, buf, nullptr);
     }
 
-    // "Autoscale"/"Fixed Range" toggle, top-right of the graph -- see
-    // EqGraphWidget.cpp's identical control for the full reasoning.
-    autoscaleLabelW_ = 82.0f;
-    autoscaleLabelH_ = 16.0f;
-    autoscaleLabelX_ = graphX_ + graphW_ - autoscaleLabelW_ - 2.0f;
-    autoscaleLabelY_ = graphY_ + 2.0f;
-    beginPath();
-    roundedRect(autoscaleLabelX_, autoscaleLabelY_, autoscaleLabelW_, autoscaleLabelH_, 3.0f);
-    fillColor(spectrumAutoscale_ ? Color(55, 100, 130, 0.9f) : Color(34, 37, 43, 0.85f));
-    fill();
-    fillColor(spectrumAutoscale_ ? Color(230, 232, 236) : Color(150, 154, 162));
-    fontSize(9.5f);
-    textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
-    text(autoscaleLabelX_ + autoscaleLabelW_ * 0.5f, autoscaleLabelY_ + autoscaleLabelH_ * 0.5f + 1.0f,
-         spectrumAutoscale_ ? "Autoscale" : "Fixed Range", nullptr);
-
     // Background spectrum -- pre-/post-compression, exactly EqGraphWidget's
     // own autoscale-to-the-union / dual-trace-hierarchy mechanism, see that
     // file's spectrumToY() comment for the full reasoning.
@@ -594,6 +578,24 @@ void MultibandGraphWidget::onNanoDisplay()
         textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
         text(lx + textW * 0.5f, ly + textH * 0.5f + 0.5f, buf, nullptr);
     }
+
+    // "Autoscale"/"Fixed Range" toggle, top-right of the graph -- see
+    // EqGraphWidget.cpp's identical control for the full reasoning. Drawn
+    // last, like the EQs' own: drawn before the spectrum (as it was), the
+    // spectrum painted over it and the button was invisible with audio.
+    autoscaleLabelW_ = 82.0f;
+    autoscaleLabelH_ = 16.0f;
+    autoscaleLabelX_ = graphX_ + graphW_ - autoscaleLabelW_ - 2.0f;
+    autoscaleLabelY_ = graphY_ + 2.0f;
+    beginPath();
+    roundedRect(autoscaleLabelX_, autoscaleLabelY_, autoscaleLabelW_, autoscaleLabelH_, 3.0f);
+    fillColor(spectrumAutoscale_ ? Color(55, 100, 130, 0.9f) : Color(34, 37, 43, 0.85f));
+    fill();
+    fillColor(spectrumAutoscale_ ? Color(230, 232, 236) : Color(150, 154, 162));
+    fontSize(9.5f);
+    textAlign(ALIGN_CENTER | ALIGN_MIDDLE);
+    text(autoscaleLabelX_ + autoscaleLabelW_ * 0.5f, autoscaleLabelY_ + autoscaleLabelH_ * 0.5f + 1.0f,
+         spectrumAutoscale_ ? "Autoscale" : "Fixed Range", nullptr);
 }
 
 bool MultibandGraphWidget::onMouse(const MouseEvent& ev)

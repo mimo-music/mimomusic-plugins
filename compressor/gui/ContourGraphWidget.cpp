@@ -43,32 +43,14 @@ void ContourGraphWidget::updateHold(float& holdDb, std::chrono::steady_clock::ti
     }
 }
 
-void ContourGraphWidget::smoothLiveValue(float& smoothed, std::chrono::steady_clock::time_point& lastUpdate, bool& init, float raw)
-{
-    // Identical to CompressorGraphWidget::smoothLiveValue() -- see that
-    // file's own comment for the full reasoning.
-    if (!init)
-    {
-        smoothed = raw;
-        init = true;
-        lastUpdate = std::chrono::steady_clock::now();
-        return;
-    }
-    const auto now = std::chrono::steady_clock::now();
-    const float dtSec = std::chrono::duration<float>(now - lastUpdate).count();
-    lastUpdate = now;
-    constexpr float kTauSec = 0.22f;
-    const float coeff = dtSec > 0.0f ? std::exp(-dtSec / kTauSec) : 1.0f;
-    smoothed = coeff * smoothed + (1.0f - coeff) * raw;
-}
-
-void ContourGraphWidget::setLiveLevels(float detectorLevelDb, float gainReductionDb, bool pushToTrail)
+void ContourGraphWidget::setLiveLevels(float detectorLevelDb, float gainReductionDb, float meterGrDb, bool pushToTrail)
 {
     detectorLevelDb_ = detectorLevelDb;
     grDbRaw_ = gainReductionDb;
-    smoothLiveValue(gainReductionDb_, grSmoothUpdated_, grSmoothInit_, gainReductionDb);
-    updateHold(grHoldDb_[0], grHoldUpdated_[0], grHoldPeakAt_[0], gainReductionDb);
-    history_[historyPos_] = gainReductionDb;
+    grSmoother_[0].process(meterGrDb, grSpeed_);
+    gainReductionDb_ = grSmoother_[0].value();
+    updateHold(grHoldDb_[0], grHoldUpdated_[0], grHoldPeakAt_[0], meterGrDb);
+    history_[historyPos_] = meterGrDb;
     historyPos_ = (historyPos_ + 1) % kHistoryLen;
     if (pushToTrail) pushTrail(0, detectorLevelDb, gainReductionDb);
     repaint();
@@ -79,7 +61,8 @@ void ContourGraphWidget::setSecondaryLiveLevels(bool show, float detectorLevelDb
     secondaryShown_ = show;
     detectorLevelDbB_ = detectorLevelDb;
     grDbRawB_ = gainReductionDb;
-    smoothLiveValue(gainReductionDbB_, grSmoothUpdatedB_, grSmoothInitB_, gainReductionDb);
+    grSmoother_[1].process(gainReductionDb, grSpeed_);
+    gainReductionDbB_ = grSmoother_[1].value();
     updateHold(grHoldDb_[1], grHoldUpdated_[1], grHoldPeakAt_[1], gainReductionDb);
     if (pushToTrail) pushTrail(1, detectorLevelDb, gainReductionDb);
 }
@@ -340,12 +323,11 @@ void ContourGraphWidget::drawTransferCurve(float x, float y, float w, float h)
     auto xToPx = [&](float db) { return dbToPxX(db); };
     auto yToPx = [&](float db) { return dbToPxY(db); };
 
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(18, 19, 23));
     fill();
     strokeColor(Color(48, 51, 58));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     // Threshold background split -- a visible difference for which side
@@ -383,12 +365,7 @@ void ContourGraphWidget::drawTransferCurve(float x, float y, float w, float h)
         text(px, y + h + 1.0f, buf, nullptr);
 
         const float py = yToPx(db);
-        beginPath();
-        moveTo(x, py);
-        lineTo(x + w, py);
-        strokeColor(Color(40, 43, 50));
-        strokeWidth(1.0f);
-        stroke();
+        crispHLine(*this, x, x + w, py, 1.0f, Color(40, 43, 50));
         textAlign(ALIGN_RIGHT | ALIGN_MIDDLE);
         text(x - 3.0f, py, buf, nullptr);
     }
@@ -870,12 +847,11 @@ void ContourGraphWidget::drawGrMeterColumn(float x, float y, float w, float h, f
     // Same structure as CompressorGraphWidget::drawGrMeterColumn() (bipolar, 0dB reference, peak-hold, and the Makeup Gain
     // overlay -- see that file's own comments for the full reasoning); only the meter's own dB range differs
     // (kGrMeterMinDb/MaxDb, see this file's header comment).
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(16, 17, 20));
     fill();
     strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     auto yOf = [&](float db) {
@@ -912,22 +888,12 @@ void ContourGraphWidget::drawGrMeterColumn(float x, float y, float w, float h, f
     else if (netDb > 0.01f)
         fillBar(netY, Color(90, 190, 150), Color(70, 150, 220), false);
 
-    beginPath();
-    moveTo(x, zeroY);
-    lineTo(x + w, zeroY);
-    strokeColor(Color(90, 94, 100));
-    strokeWidth(1.0f);
-    stroke();
+    crispHLine(*this, x, x + w, zeroY, 1.0f, Color(90, 94, 100));
 
     if (std::fabs(holdDb) > 0.01f)
     {
         const float holdY = yOf(holdDb);
-        beginPath();
-        moveTo(x, holdY);
-        lineTo(x + w, holdY);
-        strokeColor(Color(235, 238, 242));
-        strokeWidth(1.5f);
-        stroke();
+        crispHLine(*this, x, x + w, holdY, 1.5f, Color(235, 238, 242));
     }
 
     // Makeup Gain marker: a solid line at this column's own configured Makeup Gain (skipped at exactly 0dB so an untouched
@@ -935,12 +901,7 @@ void ContourGraphWidget::drawGrMeterColumn(float x, float y, float w, float h, f
     if (std::fabs(makeupDb) > 0.01f)
     {
         const float makeupY = yOf(makeupDb);
-        beginPath();
-        moveTo(x, makeupY);
-        lineTo(x + w, makeupY);
-        strokeColor(Color(160, 170, 230, 0.9f));
-        strokeWidth(1.5f);
-        stroke();
+        crispHLine(*this, x, x + w, makeupY, 1.5f, Color(160, 170, 230, 0.9f));
     }
 
     fillColor(Color(140, 144, 152));
@@ -968,12 +929,11 @@ void ContourGraphWidget::drawGrScale(float x, float y, float h)
 
 void ContourGraphWidget::drawGrHistory(float x, float y, float w, float h)
 {
-    beginPath();
-    rect(x, y, w, h);
+    crispRect(*this, x, y, w, h);
     fillColor(Color(14, 15, 18));
     fill();
     strokeColor(Color(44, 47, 54));
-    strokeWidth(1.0f);
+    strokeWidth(lineWidth());
     stroke();
 
     fillColor(Color(120, 124, 132));
@@ -1002,12 +962,7 @@ void ContourGraphWidget::drawGrHistory(float x, float y, float w, float h)
     // both look like "a wiggly line" without a zero to compare against).
     const float zeroFrac = dbToAxis(0.0f, kGrMeterMinDb, kGrMeterMaxDb);
     const float zeroY = y + h - zeroFrac * (h - 2.0f) - 1.0f;
-    beginPath();
-    moveTo(x, zeroY);
-    lineTo(x + w, zeroY);
-    strokeColor(Color(60, 64, 70, 0.6f));
-    strokeWidth(1.0f);
-    stroke();
+    crispHLine(*this, x, x + w, zeroY, 1.0f, Color(60, 64, 70, 0.6f));
 }
 
 void ContourGraphWidget::onNanoDisplay()
@@ -1062,7 +1017,12 @@ void ContourGraphWidget::onNanoDisplay()
     drawGrValue(curveX_ + curveW_ + 6.0f, gainReductionDb_ + makeupGainDb_);
     if (secondaryShown_) drawGrValue(curveX_ + curveW_ + 6.0f + grColW + 4.0f, gainReductionDbB_ + makeupGainDbB_);
 
-    drawGrHistory(curveX_, curveY_ + curveH_ + labelPad + 6.0f, curveW_ + grColsW + grScaleW + 8.0f, histH);
+    // History below the curve, the GR meter's Fast | Slow switch below the
+    // meter -- same layout as CompressorGraphWidget.
+    const float histY = curveY_ + curveH_ + labelPad + 6.0f;
+    drawGrHistory(curveX_, histY, curveW_, histH);
+    grSpeedSwitch_.setBox(curveX_ + curveW_ + 6.0f, histY, grColsW + grScaleW + 2.0f, histH);
+    grSpeedSwitch_.draw(*this, grSpeed_);
     drawMenu();
 }
 
@@ -1548,6 +1508,7 @@ std::string ContourGraphWidget::tooltipAt(double lx, double ly) const
 {
     if (menuOpen_) return std::string();
     const float x = float(lx), y = float(ly);
+    if (grSpeedSwitch_.contains(x, y)) return GrSpeedSwitch::tooltip();
     char buf[160]; // the longest line ("Linked (group N, X only): ... its horizontal moves.") needs ~75
 
     {
@@ -1630,6 +1591,22 @@ bool ContourGraphWidget::onMouse(const MouseEvent& ev)
         if (run) runMenuAction(action);
         repaint();
         return true;
+    }
+
+    if (ev.press && ev.button == 1)
+    {
+        const int seg = grSpeedSwitch_.hit(x, y);
+        if (seg >= 0)
+        {
+            const GrMeterSpeed s = GrMeterSpeed(seg);
+            if (s != grSpeed_)
+            {
+                grSpeed_ = s;
+                if (onGrMeterSpeedChanged_) onGrMeterSpeedChanged_(s);
+                repaint();
+            }
+            return true;
+        }
     }
 
     // Right button (Edit tool only -- the Draw tools never grab existing

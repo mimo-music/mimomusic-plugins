@@ -144,6 +144,7 @@ UICompressorStereo::UICompressorStereo()
     // own comment.
     graph_ = new CompressorGraphWidget(this);
     graph_->setThresholdRange(-60.0f, 0.0f); // matches the Threshold field's own range below
+    graph_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graph_->setOnThresholdChanged([this](float v) { onGraphParamChanged(kParamThreshold, v); });
     graph_->setOnRatioChanged([this](float v) { onGraphParamChanged(kParamRatio, v); });
     graph_->setOnKneeChanged([this](float v) { onGraphParamChanged(kParamKnee, v); });
@@ -156,6 +157,7 @@ UICompressorStereo::UICompressorStereo()
     // which now touches all three graphs.
     graphA_ = new CompressorGraphWidget(this);
     graphA_->setThresholdRange(-60.0f, 0.0f);
+    graphA_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graphA_->setOnThresholdChanged([this](float v) { onGraphParamChanged(kParamThreshold, v); });
     graphA_->setOnRatioChanged([this](float v) { onGraphParamChanged(kParamRatio, v); });
     graphA_->setOnKneeChanged([this](float v) { onGraphParamChanged(kParamKnee, v); });
@@ -166,6 +168,7 @@ UICompressorStereo::UICompressorStereo()
     // independent -- dragging graphB_ while linked therefore edits the
     // exact same Parameter graphA_ does, a genuine live link rather than
     // a one-time copy. See bParam()'s own declaration comment.
+    graphB_->setOnGrMeterSpeedChanged([this](DGL_NAMESPACE::GrMeterSpeed s) { setGrMeterSpeed(s, true); });
     graphB_->setOnThresholdChanged([this](float v) { onGraphParamChanged(bParam(true, kParamThreshold, kParamThresholdB), v); });
     graphB_->setOnRatioChanged([this](float v) { onGraphParamChanged(bParam(true, kParamRatio, kParamRatioB), v); });
     graphB_->setOnKneeChanged([this](float v) { onGraphParamChanged(bParam(true, kParamKnee, kParamKneeB), v); });
@@ -526,6 +529,9 @@ UICompressorStereo::UICompressorStereo()
     // fieldTooltipAt() so the text shown always matches whichever field
     // is actually under the pointer right now.
     tooltip_->addFieldTarget(strip_, [this](double x, double y) { return strip_->fieldTooltipAt(x, y); });
+    tooltip_->addFieldTarget(graph_, [this](double x, double y) { return graph_->tooltipAt(x, y); });
+    tooltip_->addFieldTarget(graphA_, [this](double x, double y) { return graphA_->tooltipAt(x, y); });
+    tooltip_->addFieldTarget(graphB_, [this](double x, double y) { return graphB_->tooltipAt(x, y); });
     tooltip_->addFieldTarget(stripA_, [this](double x, double y) { return stripA_->fieldTooltipAt(x, y); });
     tooltip_->addFieldTarget(stripB_, [this](double x, double y) { return stripB_->fieldTooltipAt(x, y); });
     tooltip_->addFieldTarget(stripGlobal_, [this](double x, double y) { return stripGlobal_->fieldTooltipAt(x, y); });
@@ -1204,8 +1210,19 @@ void UICompressorStereo::parameterChanged(uint32_t index, float value)
     repaint();
 }
 
+// The GR meter's Fast/Slow switch: one setting for every graph in this
+// editor, saved with the session as the "grMeterSpeed" State.
+void UICompressorStereo::setGrMeterSpeed(DGL_NAMESPACE::GrMeterSpeed s, bool save)
+{
+    graph_->setGrMeterSpeed(s);
+    graphA_->setGrMeterSpeed(s);
+    graphB_->setGrMeterSpeed(s);
+    if (save) setState("grMeterSpeed", DGL_NAMESPACE::grMeterSpeedStateValue(s));
+}
+
 void UICompressorStereo::stateChanged(const char* key, const char* value)
 {
+    if (std::strcmp(key, "grMeterSpeed") == 0) { setGrMeterSpeed(DGL_NAMESPACE::grMeterSpeedFromState(value), false); return; }
     if (std::strcmp(key, "stereoMode") == 0)
     {
         stereoMode_ = sscomp::clampStereoMode(std::atoi(value));

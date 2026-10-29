@@ -7,6 +7,8 @@
 // tests/gui_stub/NanoVG.hpp) with synthetic mouse events: the Soft clip's
 // knee line and the Ceiling line sit only a few pixels apart, so each must
 // grab its own drags; the knee line must not be grabbable in Hard mode.
+// Also the GR meter's Fast | Slow switch (clicks, hover text) and its
+// ballistics (gui/GrMeterBallistics.hpp, timed with short real sleeps).
 //
 // Build/run from compressor/:
 //   g++ -std=gnu++17 -O1 -fno-access-control -Itests/gui_stub -Igui -Iplugin/dsp \
@@ -14,8 +16,10 @@
 //   && /tmp/limiter_widget_sim
 #include "LimiterGraphWidget.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <thread>
 
 using namespace DGL;
 
@@ -24,6 +28,8 @@ struct Rig
 {
     LimiterGraphWidget g{nullptr};
     float threshold = -999, ceiling = -999, knee = -999;
+    int speedChanges = 0;
+    GrMeterSpeed lastSpeed = GrMeterSpeed::Fast;
     explicit Rig(bool soft)
     {
         g.w_ = 900; g.h_ = 520;
@@ -35,6 +41,7 @@ struct Rig
         g.setOnThresholdChanged([this](float v) { threshold = v; });
         g.setOnCeilingChanged([this](float v) { ceiling = v; });
         g.setOnClipKneeChanged([this](float v) { knee = v; });
+        g.setOnGrMeterSpeedChanged([this](GrMeterSpeed s) { lastSpeed = s; ++speedChanges; });
         g.onNanoDisplay(); // computes the curve rectangle
     }
     void drag(double x0, double y0, double x1, double y1)
@@ -94,6 +101,54 @@ int main()
         r.g.setCurveParams(p);
         const float slope = r.g.limitedDbFor(0.0f) - r.g.limitedDbFor(-5.0f);
         check(std::fabs(slope - 0.25f) < 1e-3f, "[7] 20:1: limiter-only line rises 5/20 = 0.25 dB over 5 dB", slope);
+    }
+    {
+        // The switch sits below the GR meter: caption, then Fast | Slow.
+        Rig r(true);
+        const GrSpeedSwitch& sw = r.g.grSpeedSwitch_;
+        const float y = sw.y_ + 14.0f + 8.0f;
+        const float fastX = sw.x_ + sw.w_ * 0.25f, slowX = sw.x_ + sw.w_ * 0.75f;
+        check(sw.w_ > 40.0f && sw.y_ > r.g.curveY_ + r.g.curveH_ && sw.x_ > r.g.curveX_ + r.g.curveW_,
+              "[8] the Fast | Slow switch is laid out below the GR meter (width, px)", sw.w_);
+        MouseEvent e; e.pos = {slowX, y}; e.button = 1; e.press = true;
+        const bool used = r.g.onMouse(e);
+        e.press = false; r.g.onMouse(e);
+        check(used && r.speedChanges == 1 && r.lastSpeed == GrMeterSpeed::Slow && r.g.grSpeed_ == GrMeterSpeed::Slow &&
+              r.threshold == -999 && r.ceiling == -999 && r.knee == -999,
+              "[9] click Slow: speed Slow, reported once, no handle grabbed", r.speedChanges);
+        e.press = true; r.g.onMouse(e); e.press = false; r.g.onMouse(e);
+        check(r.speedChanges == 1, "[10] click Slow again: nothing reported", r.speedChanges);
+        e.pos = {fastX, y}; e.press = true; r.g.onMouse(e);
+        check(r.speedChanges == 2 && r.lastSpeed == GrMeterSpeed::Fast, "[11] click Fast: back to Fast", r.speedChanges);
+        check(!r.g.tooltipAt(sw.x_ + 2.0f, sw.y_ + 4.0f).empty() && r.g.tooltipAt(r.g.curveX_ + 20.0f, r.g.curveY_ + 20.0f).empty(),
+              "[12] hover text over the switch (caption included), none over the curve", 0);
+        r.g.setGrMeterSpeed(GrMeterSpeed::Slow);
+        check(r.speedChanges == 2 && r.g.grSpeed_ == GrMeterSpeed::Slow, "[13] setGrMeterSpeed() (State restore) doesn't report back", r.speedChanges);
+        check(grMeterSpeedFromState("1") == GrMeterSpeed::Slow && grMeterSpeedFromState("0") == GrMeterSpeed::Fast &&
+              grMeterSpeedFromState("") == GrMeterSpeed::Fast && std::string(grMeterSpeedStateValue(GrMeterSpeed::Slow)) == "1",
+              "[14] State value round trip", 0);
+    }
+    {
+        // Ballistics: Fast follows a new reduction almost at once and returns
+        // slowly; Slow averages. One process() call per sleep, like uiIdle().
+        auto run = [](GrMeterSpeed s, float rawDb, int ms, GrMeterSmoother& sm) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+            sm.process(rawDb, s);
+            return sm.value();
+        };
+        GrMeterSmoother fast, slow;
+        fast.process(0.0f, GrMeterSpeed::Fast);
+        const float fastIn = run(GrMeterSpeed::Fast, -10.0f, 40, fast);
+        slow.process(0.0f, GrMeterSpeed::Slow);
+        const float slowIn = run(GrMeterSpeed::Slow, -10.0f, 40, slow);
+        check(fastIn < -9.5f, "[15] Fast: -10 dB reduction shown within one 40 ms tick (dB)", fastIn);
+        check(slowIn > -3.0f && slowIn < -0.5f, "[16] Slow: after 40 ms only part of it (dB)", slowIn);
+        const float fastOut = run(GrMeterSpeed::Fast, 0.0f, 100, fast);
+        check(fastOut < -6.0f && fastOut > -9.5f, "[17] Fast: 100 ms after the reduction ends, still returning (dB)", fastOut);
+        GrMeterSmoother up;
+        up.process(0.0f, GrMeterSpeed::Fast);
+        const float boost = run(GrMeterSpeed::Fast, 6.0f, 40, up);
+        check(boost > 5.7f, "[18] Fast: an upward boost uses the attack time too (dB)", boost);
     }
     std::printf("\n%s: %d check(s) failed\n", fails == 0 ? "PASS" : "FAILURES", fails);
     return fails == 0 ? 0 : 1;
